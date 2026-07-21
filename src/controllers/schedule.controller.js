@@ -1,5 +1,7 @@
 const db = require('../config/db');
 
+const SHIFT_TYPES = ['travail', 'conge', 'repos', 'absence'];
+
 // ─────────────────────────────────────────────
 // UTILITAIRES
 // ─────────────────────────────────────────────
@@ -125,10 +127,14 @@ const getMySchedule = async (req, res) => {
 // Body: { userId, date, startTime, endTime, note, breaks: [{startTime, endTime, label}] }
 const createShift = async (req, res) => {
   const { companyId, id: adminId } = req.user;
-  const { userId, date, startTime, endTime, note, breaks = [] } = req.body;
+  const { userId, date, startTime, endTime, note, breaks = [], type = 'travail' } = req.body;
 
   if (!userId || !date || !startTime || !endTime) {
     return res.status(400).json({ message: 'userId, date, startTime et endTime sont requis.' });
+  }
+
+  if (!SHIFT_TYPES.includes(type)) {
+    return res.status(400).json({ message: 'Type de créneau invalide.' });
   }
 
   if (startTime >= endTime) {
@@ -157,12 +163,12 @@ const createShift = async (req, res) => {
 
     // Crée le créneau (ON CONFLICT remplace si même jour/employé)
     const shiftResult = await client.query(
-      `INSERT INTO shifts (user_id, company_id, date, start_time, end_time, note, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO shifts (user_id, company_id, date, start_time, end_time, note, type, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (user_id, date)
-       DO UPDATE SET start_time = $4, end_time = $5, note = $6, updated_at = NOW()
+       DO UPDATE SET start_time = $4, end_time = $5, note = $6, type = $7, updated_at = NOW()
        RETURNING *`,
-      [userId, companyId, date, startTime, endTime, note, adminId]
+      [userId, companyId, date, startTime, endTime, note, type, adminId]
     );
 
     const shift = shiftResult.rows[0];
@@ -200,10 +206,14 @@ const createShift = async (req, res) => {
 const updateShift = async (req, res) => {
   const { companyId } = req.user;
   const { id }        = req.params;
-  const { startTime, endTime, note, breaks = [] } = req.body;
+  const { startTime, endTime, note, breaks = [], type = 'travail' } = req.body;
 
   if (startTime >= endTime) {
     return res.status(400).json({ message: 'L\'heure de début doit être avant l\'heure de fin.' });
+  }
+
+  if (!SHIFT_TYPES.includes(type)) {
+    return res.status(400).json({ message: 'Type de créneau invalide.' });
   }
 
   const client = await db.connect();
@@ -212,10 +222,10 @@ const updateShift = async (req, res) => {
 
     const result = await client.query(
       `UPDATE shifts
-       SET start_time = $1, end_time = $2, note = $3, updated_at = NOW()
-       WHERE id = $4 AND company_id = $5
+       SET start_time = $1, end_time = $2, note = $3, type = $4, updated_at = NOW()
+       WHERE id = $5 AND company_id = $6
        RETURNING *`,
-      [startTime, endTime, note, id, companyId]
+      [startTime, endTime, note, type, id, companyId]
     );
 
     if (result.rows.length === 0) {

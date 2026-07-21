@@ -66,3 +66,18 @@ CREATE INDEX IF NOT EXISTS idx_leave_requests_company ON leave_requests(company_
 CREATE INDEX IF NOT EXISTS idx_leave_requests_status  ON leave_requests(status);
 CREATE INDEX IF NOT EXISTS idx_leave_balances_user    ON leave_balances(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user     ON leave_notifications(user_id, is_read);
+
+-- Filet de sécurité : sur les environnements où leave_balances a été créée
+-- avant l'ajout de cette contrainte, l'UNIQUE inline ci-dessus n'a jamais
+-- été appliqué (CREATE TABLE IF NOT EXISTS ne modifie pas une table existante).
+-- Le code s'appuie sur ON CONFLICT (user_id, leave_type, year), donc on la
+-- rajoute ici si absente.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'leave_balances_user_type_year_unique'
+  ) THEN
+    ALTER TABLE leave_balances
+      ADD CONSTRAINT leave_balances_user_type_year_unique UNIQUE (user_id, leave_type, year);
+  END IF;
+END $$;

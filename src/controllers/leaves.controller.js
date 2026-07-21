@@ -44,7 +44,9 @@ const getMyBalance = async (req, res) => {
       const userResult = await db.query('SELECT hire_date FROM users WHERE id = $1', [userId]);
       const hireDate   = userResult.rows[0]?.hire_date;
       if (hireDate) {
-        const legalDays = computeLegalBalance(hireDate, year);
+        const companyResult = await db.query('SELECT leave_accrual_per_month FROM company WHERE id = $1', [companyId]);
+        const accrualPerMonth = companyResult.rows[0]?.leave_accrual_per_month ?? 2.5;
+        const legalDays = computeLegalBalance(hireDate, year, accrualPerMonth);
         balances['Congés payés'].balance_days = legalDays;
 
         // Persiste le solde calculé
@@ -164,6 +166,7 @@ const submitRequest = async (req, res) => {
     );
 
     // Email à l'admin
+    let emailSent = true;
     try {
       await sendLeaveRequestToAdmin({
         adminEmail:   user.admin_email,
@@ -172,9 +175,10 @@ const submitRequest = async (req, res) => {
       });
     } catch (mailErr) {
       console.error('Erreur email admin:', mailErr.message);
+      emailSent = false;
     }
 
-    res.status(201).json({ message: 'Demande envoyée.', requestId, workingDays });
+    res.status(201).json({ message: 'Demande envoyée.', requestId, workingDays, emailSent });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -316,6 +320,7 @@ const reviewRequest = async (req, res) => {
     );
 
     // Email à l'employé
+    let emailSent = true;
     try {
       if (status === 'approuvé') {
         await sendLeaveApproved({
@@ -332,9 +337,10 @@ const reviewRequest = async (req, res) => {
       }
     } catch (mailErr) {
       console.error('Erreur email employé:', mailErr.message);
+      emailSent = false;
     }
 
-    res.json({ message: `Demande ${status}.` });
+    res.json({ message: `Demande ${status}.`, emailSent });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });

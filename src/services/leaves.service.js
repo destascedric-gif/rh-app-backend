@@ -78,11 +78,13 @@ const countWorkingDays = (startDate, endDate) => {
 
 /**
  * Calcule le solde de congés payés acquis selon la règle légale française :
- * 2,5 jours ouvrables par mois de travail effectif = 30 jours/an
- * @param {Date} hireDate   — date d'embauche
- * @param {number} year     — année de référence (période juin N-1 → mai N)
+ * 2,5 jours ouvrables par mois de travail effectif = 30 jours/an par défaut
+ * (personnalisable via les paramètres de l'entreprise)
+ * @param {Date} hireDate         — date d'embauche
+ * @param {number} year           — année de référence (période juin N-1 → mai N)
+ * @param {number} [accrualPerMonth=2.5] — jours acquis par mois travaillé
  */
-const computeLegalBalance = (hireDate, year) => {
+const computeLegalBalance = (hireDate, year, accrualPerMonth = 2.5) => {
   const hire = new Date(hireDate);
 
   // Période de référence légale : 1er juin N-1 → 31 mai N
@@ -103,8 +105,8 @@ const computeLegalBalance = (hireDate, year) => {
     cursor.setMonth(cursor.getMonth() + 1);
   }
 
-  // 2,5 jours par mois, plafonné à 30
-  return Math.min(months * 2.5, 30);
+  // N jours par mois, plafonné à 12 mois
+  return Math.min(months * accrualPerMonth, accrualPerMonth * 12);
 };
 
 module.exports = { countWorkingDays, computeLegalBalance, getFrenchHolidays };

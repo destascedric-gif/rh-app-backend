@@ -12,8 +12,12 @@ router.post('/setup/company',  auth, ctrl.setupCompany); // Étape 2 : infos ent
 // ── Connexion ─────────────────────────────────────────
 router.post('/login', ctrl.login);
 
+// ── Compte (utilisateur connecté) ────────────────────
+router.put('/change-password', auth, ctrl.changePassword);
+
 // ── Invitations (admin seulement) ────────────────────
-router.post('/invite',         auth, isAdmin, ctrl.inviteEmployee); // Créer + inviter un employé
-router.post('/accept-invite',  ctrl.acceptInvite);                  // Employé crée son mdp
+router.post('/invite',              auth, isAdmin, ctrl.inviteEmployee); // Créer + inviter un employé
+router.post('/invite/:id/resend',   auth, isAdmin, ctrl.resendInvite);   // Renvoyer l'invitation
+router.post('/accept-invite',       ctrl.acceptInvite);                  // Employé crée son mdp
 
 module.exports = router;

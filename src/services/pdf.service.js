@@ -133,20 +133,26 @@ const generatePayslipPDF = ({
     y += 18;
 
     // ── RÉCAPITULATIF NET ────────────────────────────────
-    y += 12;
-    doc.rect(45, y, W, 80).fill(GRAY).stroke(BORDER);
+    const recap = [];
+    if (cotisations.overtime?.hours > 0) {
+      recap.push({ label: `Heures supplémentaires (${cotisations.overtime.hours} h)`, val: `+ ${fmt(cotisations.overtime.pay)}` });
+    }
+    if (cotisations.absence?.days > 0) {
+      recap.push({ label: `Absence non rémunérée (${cotisations.absence.days} j)`, val: `- ${fmt(cotisations.absence.deduction)}` });
+    }
+    recap.push({ label: 'Salaire brut',      val: fmt(payslip.gross_amount) });
+    recap.push({ label: 'Total cotisations', val: `- ${fmt(cotisations.totalSalarial)}` });
+    recap.push({ label: 'Net imposable',     val: fmt(cotisations.netImposable) });
 
-    const recap = [
-      { label: 'Salaire brut',        val: fmt(payslip.gross_amount), bold: false },
-      { label: 'Total cotisations',   val: `- ${fmt(cotisations.totalSalarial)}`, bold: false },
-      { label: 'Net imposable',       val: fmt(cotisations.netImposable), bold: false },
-    ];
+    y += 12;
+    const recapHeight = 38 + recap.length * 14;
+    doc.rect(45, y, W, recapHeight).fill(GRAY).stroke(BORDER);
 
     doc.fillColor(DARK).font('Helvetica-Bold').fontSize(10)
        .text('Récapitulatif', 55, y + 10);
 
     recap.forEach((r, i) => {
-      doc.font(r.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(MUTED)
+      doc.font('Helvetica').fontSize(9).fillColor(MUTED)
          .text(r.label, 55, y + 28 + i * 14);
       doc.fillColor(DARK)
          .text(r.val, 380, y + 28 + i * 14, { width: 120, align: 'right' });
@@ -159,7 +165,7 @@ const generatePayslipPDF = ({
     doc.font('Helvetica-Bold').fontSize(16)
        .text(`${fmt(payslip.net_amount)} €`, 360, y + 26, { width: 170, align: 'right' });
 
-    y += 92;
+    y += recapHeight + 12;
 
     // ── CONGÉS ───────────────────────────────────────────
     if (leaveBalance) {

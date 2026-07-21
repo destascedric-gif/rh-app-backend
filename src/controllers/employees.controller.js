@@ -13,7 +13,7 @@ const getEmployees = async (req, res) => {
     const result = await db.query(
       `SELECT
          id, first_name, last_name, email, phone,
-         job_title, department, contract_type, work_time,
+         job_title, department, contract_type, work_time, weekly_hours,
          hire_date, gross_salary, photo_url, is_active, invite_accepted
        FROM users
        WHERE company_id = $1 AND role = 'employee'
@@ -40,7 +40,7 @@ const getEmployee = async (req, res) => {
     const result = await db.query(
       `SELECT
          id, first_name, last_name, email, phone,
-         job_title, department, contract_type, work_time,
+         job_title, department, contract_type, work_time, weekly_hours,
          hire_date, gross_salary, birth_date, social_security,
          photo_url, is_active, invite_accepted, created_at
        FROM users
@@ -69,7 +69,7 @@ const updateEmployee = async (req, res) => {
   const { id } = req.params;
   const {
     firstName, lastName, email, phone,
-    jobTitle, department, contractType, workTime,
+    jobTitle, department, contractType, workTime, weeklyHours,
     hireDate, grossSalary, birthDate, socialSecurity,
   } = req.body;
 
@@ -93,15 +93,16 @@ const updateEmployee = async (req, res) => {
          department      = COALESCE($6,  department),
          contract_type   = COALESCE($7,  contract_type),
          work_time       = COALESCE($8,  work_time),
-         hire_date       = COALESCE($9,  hire_date),
-         gross_salary    = COALESCE($10, gross_salary),
-         birth_date      = COALESCE($11, birth_date),
-         social_security = COALESCE($12, social_security),
+         weekly_hours    = COALESCE($9,  weekly_hours),
+         hire_date       = COALESCE($10, hire_date),
+         gross_salary    = COALESCE($11, gross_salary),
+         birth_date      = COALESCE($12, birth_date),
+         social_security = COALESCE($13, social_security),
          updated_at      = NOW()
-       WHERE id = $13
+       WHERE id = $14
        RETURNING id, first_name, last_name, email, job_title`,
       [firstName, lastName, email, phone, jobTitle, department,
-       contractType, workTime, hireDate, grossSalary, birthDate,
+       contractType, workTime, weeklyHours || null, hireDate, grossSalary, birthDate,
        socialSecurity, id]
     );
 
@@ -128,6 +129,32 @@ const deactivateEmployee = async (req, res) => {
       [id, companyId]
     );
     res.json({ message: 'Employé désactivé.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// ─────────────────────────────────────────────
+// RÉACTIVATION D'UN EMPLOYÉ
+// ─────────────────────────────────────────────
+
+// PUT /api/employees/:id/reactivate
+const reactivateEmployee = async (req, res) => {
+  const { companyId } = req.user;
+  const { id } = req.params;
+
+  try {
+    const result = await db.query(
+      `UPDATE users SET is_active = TRUE, updated_at = NOW()
+       WHERE id = $1 AND company_id = $2
+       RETURNING id`,
+      [id, companyId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Employé introuvable.' });
+    }
+    res.json({ message: 'Employé réactivé.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -219,21 +246,235 @@ const getTimesheets = async (req, res) => {
   const { month, year } = req.query;
 
   try {
-    let query = `
-      SELECT id, date, clock_in, clock_out, break_minutes, total_hours, note
-      FROM timesheets
-      WHERE user_id = $1 AND company_id = $2`;
-    const params = [id, companyId];
+    const rows = await fetchTimesheets({ userId: id, companyId, month, year });
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
 
-    if (month && year) {
-      query += ` AND EXTRACT(MONTH FROM date) = $3 AND EXTRACT(YEAR FROM date) = $4`;
-      params.push(month, year);
-    }
+// Calcule le nombre d'heures nettes à partir d'une arrivée/départ/pause
+const computeTotalHours = (clockIn, clockOut, breakMinutes) => {
+  if (!clockIn || !clockOut) return null;
+  const toMin = (t) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const minutes = toMin(clockOut) - toMin(clockIn) - (parseInt(breakMinutes, 10) || 0);
+  return minutes > 0 ? parseFloat((minutes / 60).toFixed(2)) : 0;
+};
 
-    query += ' ORDER BY date DESC';
+const fetchTimesheets = async ({ userId, companyId, month, year }) => {
+  let query = `
+    SELECT id, date, clock_in, clock_out, break_minutes, total_hours, note
+    FROM timesheets
+    WHERE user_id = $1 AND company_id = $2`;
+  const params = [userId, companyId];
 
-    const result = await db.query(query, params);
-    res.json(result.rows);
+  if (month && year) {
+    query += ` AND EXTRACT(MONTH FROM date) = $3 AND EXTRACT(YEAR FROM date) = $4`;
+    params.push(month, year);
+  }
+  query += ' ORDER BY date DESC';
+
+  const result = await db.query(query, params);
+  return result.rows;
+};
+
+// Crée ou met à jour (upsert) l'entrée de pointage d'un jour donné
+const upsertTimesheet = async ({ userId, companyId, date, clockIn, clockOut, breakMinutes, note }) => {
+  const totalHours = computeTotalHours(clockIn, clockOut, breakMinutes);
+  const result = await db.query(
+    `INSERT INTO timesheets (user_id, company_id, date, clock_in, clock_out, break_minutes, total_hours, note)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (user_id, date) DO UPDATE SET
+       clock_in = EXCLUDED.clock_in, clock_out = EXCLUDED.clock_out,
+       break_minutes = EXCLUDED.break_minutes, total_hours = EXCLUDED.total_hours,
+       note = EXCLUDED.note
+     RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note`,
+    [userId, companyId, date, clockIn || null, clockOut || null, breakMinutes || 0, totalHours, note || null]
+  );
+  return result.rows[0];
+};
+
+// POST /api/employees/:id/timesheets (admin)
+const addTimesheet = async (req, res) => {
+  const { companyId } = req.user;
+  const { id } = req.params;
+  const { date, clockIn, clockOut, breakMinutes, note } = req.body;
+
+  if (!date) return res.status(400).json({ message: 'La date est requise.' });
+
+  try {
+    const row = await upsertTimesheet({ userId: id, companyId, date, clockIn, clockOut, breakMinutes, note });
+    res.status(201).json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// PUT /api/employees/:id/timesheets/:timesheetId (admin)
+const updateTimesheet = async (req, res) => {
+  const { companyId } = req.user;
+  const { id, timesheetId } = req.params;
+  const { clockIn, clockOut, breakMinutes, note } = req.body;
+  const totalHours = computeTotalHours(clockIn, clockOut, breakMinutes);
+
+  try {
+    const result = await db.query(
+      `UPDATE timesheets SET clock_in = $1, clock_out = $2, break_minutes = $3, total_hours = $4, note = $5
+       WHERE id = $6 AND user_id = $7 AND company_id = $8
+       RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note`,
+      [clockIn || null, clockOut || null, breakMinutes || 0, totalHours, note || null, timesheetId, id, companyId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: 'Pointage introuvable.' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// DELETE /api/employees/:id/timesheets/:timesheetId (admin)
+const deleteTimesheet = async (req, res) => {
+  const { companyId } = req.user;
+  const { id, timesheetId } = req.params;
+
+  try {
+    const result = await db.query(
+      'DELETE FROM timesheets WHERE id = $1 AND user_id = $2 AND company_id = $3 RETURNING id',
+      [timesheetId, id, companyId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Pointage introuvable.' });
+    res.json({ message: 'Pointage supprimé.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// ── Auto-service (l'employé gère son propre pointage) ──
+
+// GET /api/employees/me/timesheets?month=6&year=2025
+const getMyTimesheets = async (req, res) => {
+  const { id: userId, companyId } = req.user;
+  const { month, year } = req.query;
+
+  try {
+    const rows = await fetchTimesheets({ userId, companyId, month, year });
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// POST /api/employees/me/timesheets
+const addMyTimesheet = async (req, res) => {
+  const { id: userId, companyId } = req.user;
+  const { date, clockIn, clockOut, breakMinutes, note } = req.body;
+
+  if (!date) return res.status(400).json({ message: 'La date est requise.' });
+
+  try {
+    const row = await upsertTimesheet({ userId, companyId, date, clockIn, clockOut, breakMinutes, note });
+    res.status(201).json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// PUT /api/employees/me/timesheets/:timesheetId
+const updateMyTimesheet = async (req, res) => {
+  const { id: userId, companyId } = req.user;
+  const { timesheetId } = req.params;
+  const { clockIn, clockOut, breakMinutes, note } = req.body;
+  const totalHours = computeTotalHours(clockIn, clockOut, breakMinutes);
+
+  try {
+    const result = await db.query(
+      `UPDATE timesheets SET clock_in = $1, clock_out = $2, break_minutes = $3, total_hours = $4, note = $5
+       WHERE id = $6 AND user_id = $7 AND company_id = $8
+       RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note`,
+      [clockIn || null, clockOut || null, breakMinutes || 0, totalHours, note || null, timesheetId, userId, companyId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: 'Pointage introuvable.' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// DELETE /api/employees/me/timesheets/:timesheetId
+const deleteMyTimesheet = async (req, res) => {
+  const { id: userId, companyId } = req.user;
+  const { timesheetId } = req.params;
+
+  try {
+    const result = await db.query(
+      'DELETE FROM timesheets WHERE id = $1 AND user_id = $2 AND company_id = $3 RETURNING id',
+      [timesheetId, userId, companyId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Pointage introuvable.' });
+    res.json({ message: 'Pointage supprimé.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// ─────────────────────────────────────────────
+// RÉCAP MENSUEL (heures, congés, paie)
+// ─────────────────────────────────────────────
+
+// GET /api/employees/:id/monthly-summary?month=6&year=2025
+const getMonthlySummary = async (req, res) => {
+  const { companyId } = req.user;
+  const { id } = req.params;
+  const { month, year } = req.query;
+
+  if (!month || !year) {
+    return res.status(400).json({ message: 'month et year sont requis.' });
+  }
+
+  try {
+    const hoursResult = await db.query(
+      `SELECT COALESCE(SUM(total_hours), 0) AS total_hours, COUNT(*) FILTER (WHERE clock_in IS NOT NULL) AS days_worked
+       FROM timesheets
+       WHERE user_id = $1 AND company_id = $2
+         AND EXTRACT(MONTH FROM date) = $3 AND EXTRACT(YEAR FROM date) = $4`,
+      [id, companyId, month, year]
+    );
+
+    const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    const periodEnd = new Date(year, month, 0).toISOString().slice(0, 10);
+
+    const leavesResult = await db.query(
+      `SELECT leave_type, SUM(working_days) AS days
+       FROM leave_requests
+       WHERE user_id = $1 AND company_id = $2 AND status = 'approuvé'
+         AND start_date <= $4 AND end_date >= $3
+       GROUP BY leave_type`,
+      [id, companyId, periodStart, periodEnd]
+    );
+
+    const payslipResult = await db.query(
+      `SELECT gross_amount, net_amount, file_url
+       FROM payslips
+       WHERE user_id = $1 AND company_id = $2 AND period_month = $3 AND period_year = $4`,
+      [id, companyId, month, year]
+    );
+
+    res.json({
+      totalHours: parseFloat(hoursResult.rows[0].total_hours) || 0,
+      daysWorked: parseInt(hoursResult.rows[0].days_worked, 10) || 0,
+      leaveDays: leavesResult.rows.map((r) => ({ leaveType: r.leave_type, days: parseFloat(r.days) })),
+      payslip: payslipResult.rows[0] || null,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -245,8 +486,17 @@ module.exports = {
   getEmployee,
   updateEmployee,
   deactivateEmployee,
+  reactivateEmployee,
   getPayslips,
   getDocuments,
   addDocument,
   getTimesheets,
+  addTimesheet,
+  updateTimesheet,
+  deleteTimesheet,
+  getMyTimesheets,
+  addMyTimesheet,
+  updateMyTimesheet,
+  deleteMyTimesheet,
+  getMonthlySummary,
 };

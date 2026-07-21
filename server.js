@@ -7,6 +7,7 @@ const employeeRoutes = require('./src/routes/employees.routes');
 const leavesRoutes   = require('./src/routes/leaves.routes');
 const scheduleRoutes = require('./src/routes/schedule.routes');
 const payrollRoutes  = require('./src/routes/payroll.routes');
+const settingsRoutes = require('./src/routes/settings.routes');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +20,7 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/leaves',    leavesRoutes);
 app.use('/api/schedule',  scheduleRoutes);
 app.use('/api/payroll',   payrollRoutes);
+app.use('/api/settings',  settingsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

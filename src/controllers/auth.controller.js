@@ -1,8 +1,8 @@
-const bcrypt   = require('bcrypt');
+const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const crypto   = require('crypto');
-const nodemailer = require('nodemailer');
 const db       = require('../config/db');
+const { transporter, FRONTEND_URL, FROM_ADDRESS } = require('../config/mailer');
 
 // ─────────────────────────────────────────────
 // UTILITAIRES
@@ -19,16 +19,10 @@ const generateToken = (user) => {
 
 // Envoi de l'email d'invitation
 const sendInviteEmail = async (email, firstName, inviteToken) => {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-
-  const inviteUrl = `${process.env.FRONTEND_URL}/accept-invite?token=${inviteToken}`;
+  const inviteUrl = `${FRONTEND_URL}/accept-invite?token=${inviteToken}`;
 
   await transporter.sendMail({
-    from: `"RH App" <${process.env.SMTP_USER}>`,
+    from: FROM_ADDRESS,
     to: email,
     subject: 'Bienvenue — Créez votre accès RH',
     html: `
@@ -209,7 +203,7 @@ const login = async (req, res) => {
 
 // POST /api/auth/invite — Créer un employé et envoyer l'invitation
 const inviteEmployee = async (req, res) => {
-  const { firstName, lastName, email, jobTitle, hireDate, grossSalary } = req.body;
+  const { firstName, lastName, email, jobTitle, hireDate, grossSalary, workTime, weeklyHours } = req.body;
   const companyId = req.user.companyId;
 
   if (!firstName || !lastName || !email) {
@@ -227,23 +221,89 @@ const inviteEmployee = async (req, res) => {
     const inviteToken  = crypto.randomBytes(32).toString('hex');
     const inviteExpires = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
+    // Heures hebdo par défaut = politique de l'entreprise si non précisées
+    let effectiveWeeklyHours = weeklyHours;
+    if (!effectiveWeeklyHours) {
+      const companyResult = await db.query('SELECT default_weekly_hours FROM company WHERE id = $1', [companyId]);
+      effectiveWeeklyHours = companyResult.rows[0]?.default_weekly_hours ?? 35;
+    }
+
     // Crée l'employé sans mot de passe
     await db.query(
       `INSERT INTO users
          (company_id, first_name, last_name, email, role, job_title, hire_date,
-          gross_salary, invite_token, invite_expires, invite_accepted)
-       VALUES ($1,$2,$3,$4,'employee',$5,$6,$7,$8,$9,FALSE)`,
+          gross_salary, work_time, weekly_hours, invite_token, invite_expires, invite_accepted)
+       VALUES ($1,$2,$3,$4,'employee',$5,$6,$7,$8,$9,$10,$11,FALSE)`,
       [companyId, firstName, lastName, email, jobTitle, hireDate, grossSalary,
-       inviteToken, inviteExpires]
+       workTime || null, effectiveWeeklyHours, inviteToken, inviteExpires]
     );
 
-    // Envoie l'email d'invitation
-    await sendInviteEmail(email, firstName, inviteToken);
+    // L'employé est créé même si l'email échoue à partir d'ici — on ne bloque
+    // pas la création pour un problème SMTP, mais on remonte l'info au front.
+    let emailSent = true;
+    try {
+      await sendInviteEmail(email, firstName, inviteToken);
+    } catch (mailErr) {
+      console.error('Erreur envoi email invitation :', mailErr.message);
+      emailSent = false;
+    }
 
-    res.status(201).json({ message: `Invitation envoyée à ${email}.` });
+    res.status(201).json({
+      message: emailSent
+        ? `Invitation envoyée à ${email}.`
+        : `Employé créé, mais l'email d'invitation n'a pas pu être envoyé. Vous pourrez le renvoyer depuis la fiche employé.`,
+      emailSent,
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Erreur lors de l\'envoi de l\'invitation.' });
+    res.status(500).json({ message: 'Erreur lors de la création de l\'employé.' });
+  }
+};
+
+// POST /api/auth/invite/:id/resend — Renvoyer l'email d'invitation à un employé en attente
+const resendInvite = async (req, res) => {
+  const { id } = req.params;
+  const companyId = req.user.companyId;
+
+  try {
+    const result = await db.query(
+      `SELECT id, first_name, email, invite_accepted
+       FROM users
+       WHERE id = $1 AND company_id = $2 AND role = 'employee'`,
+      [id, companyId]
+    );
+
+    const employee = result.rows[0];
+    if (!employee) {
+      return res.status(404).json({ message: 'Employé introuvable.' });
+    }
+    if (employee.invite_accepted) {
+      return res.status(400).json({ message: 'Cet employé a déjà activé son compte.' });
+    }
+
+    const inviteToken   = crypto.randomBytes(32).toString('hex');
+    const inviteExpires = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+    await db.query(
+      `UPDATE users SET invite_token = $1, invite_expires = $2, updated_at = NOW() WHERE id = $3`,
+      [inviteToken, inviteExpires, id]
+    );
+
+    let emailSent = true;
+    try {
+      await sendInviteEmail(employee.email, employee.first_name, inviteToken);
+    } catch (mailErr) {
+      console.error('Erreur renvoi email invitation :', mailErr.message);
+      emailSent = false;
+    }
+
+    res.json({
+      message: emailSent ? 'Invitation renvoyée.' : "L'email n'a pas pu être envoyé.",
+      emailSent,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
   }
 };
 
@@ -306,11 +366,54 @@ const acceptInvite = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────
+// CHANGEMENT DE MOT DE PASSE (utilisateur connecté)
+// ─────────────────────────────────────────────
+
+// PUT /api/auth/change-password
+const changePassword = async (req, res) => {
+  const { id: userId } = req.user;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'Mot de passe actuel et nouveau mot de passe requis.' });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: 'Le nouveau mot de passe doit faire au moins 8 caractères.' });
+  }
+
+  try {
+    const result = await db.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    const user = result.rows[0];
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur introuvable.' });
+    }
+
+    const match = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!match) {
+      return res.status(401).json({ message: 'Mot de passe actuel incorrect.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await db.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [passwordHash, userId]
+    );
+
+    res.json({ message: 'Mot de passe modifié avec succès.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
 module.exports = {
   getSetupStatus,
   setupAdmin,
   setupCompany,
   login,
   inviteEmployee,
+  resendInvite,
   acceptInvite,
+  changePassword,
 };
