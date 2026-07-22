@@ -1,12 +1,11 @@
-const { transporter, FRONTEND_URL, FROM_ADDRESS } = require('../config/mailer');
+const { sendMail, FRONTEND_URL } = require('../config/mailer');
 
 const formatDate = (d) =>
   new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
 
 // Email envoyé à l'employé quand sa demande est approuvée
 const sendLeaveApproved = async ({ email, firstName, leaveType, startDate, endDate, workingDays }) => {
-  await transporter.sendMail({
-    from: FROM_ADDRESS,
+  await sendMail({
     to: email,
     subject: `✅ Demande de congé approuvée`,
     html: `
@@ -29,8 +28,7 @@ const sendLeaveApproved = async ({ email, firstName, leaveType, startDate, endDa
 
 // Email envoyé à l'employé quand sa demande est refusée
 const sendLeaveRefused = async ({ email, firstName, leaveType, startDate, endDate, adminNote }) => {
-  await transporter.sendMail({
-    from: FROM_ADDRESS,
+  await sendMail({
     to: email,
     subject: `❌ Demande de congé refusée`,
     html: `
@@ -53,8 +51,7 @@ const sendLeaveRefused = async ({ email, firstName, leaveType, startDate, endDat
 // Email envoyé à l'admin quand un employé soumet une demande
 const sendLeaveRequestToAdmin = async ({ adminEmail, employeeName, leaveType, startDate, endDate, workingDays, reason }) => {
   const appUrl = `${FRONTEND_URL}/admin/leaves`;
-  await transporter.sendMail({
-    from: FROM_ADDRESS,
+  await sendMail({
     to: adminEmail,
     subject: `📋 Nouvelle demande de congé — ${employeeName}`,
     html: `

@@ -1,18 +1,34 @@
-const nodemailer = require('nodemailer');
-
-const port = Number(process.env.SMTP_PORT) || 587;
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port,
-  secure: port === 465,
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-});
-
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// Adresse d'expédition affichée — doit correspondre à un expéditeur vérifié
-// chez le fournisseur SMTP (pas forcément le login SMTP lui-même, ex. Brevo).
-const FROM_ADDRESS = `"${process.env.SMTP_FROM_NAME || 'RH App'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`;
+const FROM_EMAIL = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
+const FROM_NAME  = process.env.SMTP_FROM_NAME || 'RH App';
 
-module.exports = { transporter, FRONTEND_URL, FROM_ADDRESS };
+// Envoi via l'API HTTP de Brevo (https, port 443) plutôt que par SMTP :
+// certains hébergeurs (Railway notamment) bloquent silencieusement les ports
+// SMTP sortants (587 et 465), ce qui fait planter/pendre l'envoi indéfiniment
+// sans jamais lever d'erreur exploitable.
+const sendMail = async ({ to, subject, html }) => {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': process.env.BREVO_API_KEY,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { name: FROM_NAME, email: FROM_EMAIL },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Échec de l'envoi via Brevo (${res.status}) : ${body}`);
+  }
+
+  return res.json();
+};
+
+module.exports = { sendMail, FRONTEND_URL };

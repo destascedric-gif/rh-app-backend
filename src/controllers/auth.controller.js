@@ -2,7 +2,7 @@ const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const crypto   = require('crypto');
 const db       = require('../config/db');
-const { transporter, FRONTEND_URL, FROM_ADDRESS } = require('../config/mailer');
+const { sendMail, FRONTEND_URL } = require('../config/mailer');
 
 // ─────────────────────────────────────────────
 // UTILITAIRES
@@ -21,8 +21,7 @@ const generateToken = (user) => {
 const sendInviteEmail = async (email, firstName, inviteToken) => {
   const inviteUrl = `${FRONTEND_URL}/accept-invite?token=${inviteToken}`;
 
-  await transporter.sendMail({
-    from: FROM_ADDRESS,
+  await sendMail({
     to: email,
     subject: 'Bienvenue — Créez votre accès RH',
     html: `
