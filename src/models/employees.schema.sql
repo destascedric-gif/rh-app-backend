@@ -5,13 +5,17 @@
 -- Ajout des colonnes manquantes sur la table users existante
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS birth_date        DATE,
-  ADD COLUMN IF NOT EXISTS social_security   VARCHAR(15),  -- stocké chiffré en prod
   ADD COLUMN IF NOT EXISTS photo_url         VARCHAR(500),
   ADD COLUMN IF NOT EXISTS contract_type     VARCHAR(20)
     CHECK (contract_type IN ('CDI', 'CDD', 'Alternance', 'Stage', 'Freelance')),
   ADD COLUMN IF NOT EXISTS work_time         VARCHAR(20)
     CHECK (work_time IN ('Temps plein', 'Temps partiel')),
   ADD COLUMN IF NOT EXISTS department        VARCHAR(100);
+
+-- Le numéro de sécurité sociale n'est utilisé par aucune fonctionnalité de
+-- l'app (juste affiché masqué) : on ne le stocke plus du tout plutôt que de
+-- porter le risque de sécurité d'une donnée sensible non exploitée.
+ALTER TABLE users DROP COLUMN IF EXISTS social_security;
 
 -- Table : documents (contrats, avenants, autres fichiers RH)
 CREATE TABLE IF NOT EXISTS documents (

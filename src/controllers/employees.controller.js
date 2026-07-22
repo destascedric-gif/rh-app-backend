@@ -41,7 +41,7 @@ const getEmployee = async (req, res) => {
       `SELECT
          id, first_name, last_name, email, phone,
          job_title, department, contract_type, work_time, weekly_hours,
-         hire_date, gross_salary, birth_date, social_security,
+         hire_date, gross_salary, birth_date,
          photo_url, is_active, invite_accepted, created_at
        FROM users
        WHERE id = $1 AND company_id = $2`,
@@ -70,7 +70,7 @@ const updateEmployee = async (req, res) => {
   const {
     firstName, lastName, email, phone,
     jobTitle, department, contractType, workTime, weeklyHours,
-    hireDate, grossSalary, birthDate, socialSecurity,
+    hireDate, grossSalary, birthDate,
   } = req.body;
 
   try {
@@ -97,13 +97,12 @@ const updateEmployee = async (req, res) => {
          hire_date       = COALESCE($10, hire_date),
          gross_salary    = COALESCE($11, gross_salary),
          birth_date      = COALESCE($12, birth_date),
-         social_security = COALESCE($13, social_security),
          updated_at      = NOW()
-       WHERE id = $14
+       WHERE id = $13
        RETURNING id, first_name, last_name, email, job_title`,
       [firstName, lastName, email, phone, jobTitle, department,
        contractType, workTime, weeklyHours || null, hireDate, grossSalary, birthDate,
-       socialSecurity, id]
+       id]
     );
 
     res.json({ message: 'Fiche mise à jour.', employee: result.rows[0] });

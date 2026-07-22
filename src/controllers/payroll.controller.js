@@ -246,7 +246,7 @@ const downloadPayslip = async (req, res) => {
     const result = await db.query(
       `SELECT p.*,
               u.first_name, u.last_name, u.job_title, u.contract_type,
-              u.work_time, u.hire_date, u.social_security, u.gross_salary,
+              u.work_time, u.hire_date, u.gross_salary,
               c.name AS company_name, c.siret, c.address, c.city, c.postal_code
        FROM payslips p
        JOIN users u   ON u.id = p.user_id

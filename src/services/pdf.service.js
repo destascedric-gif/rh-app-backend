@@ -71,8 +71,6 @@ const generatePayslipPDF = ({
       ['Date d\'embauche', employee.hire_date
         ? new Date(employee.hire_date).toLocaleDateString('fr-FR') : '—'],
       ['Temps de travail', employee.work_time ?? '—'],
-      ['N° SS',            employee.social_security
-        ? '•'.repeat(11) + employee.social_security.slice(-4) : '—'],
     ];
     empLines2.forEach(([label, val], i) => {
       doc.fillColor(MUTED).text(label, col2,      y + 24 + i * 14);
