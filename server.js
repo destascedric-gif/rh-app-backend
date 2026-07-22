@@ -12,7 +12,22 @@ const settingsRoutes = require('./src/routes/settings.routes');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+// L'app est accessible depuis plusieurs origines (domaine propre + alias
+// Vercel) : on autorise explicitement chacune plutôt qu'une seule.
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'https://myorgaly.fr',
+  'https://www.myorgaly.fr',
+  'https://rh-app-frontend.vercel.app',
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(new Error('Origine non autorisée par CORS.'));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 
 app.use('/api/auth',      authRoutes);
