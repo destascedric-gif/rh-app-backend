@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { toLocalDateString } = require('../utils/date');
 
 // ─────────────────────────────────────────────
 // LISTE DES EMPLOYÉS
@@ -450,7 +451,7 @@ const getMonthlySummary = async (req, res) => {
     );
 
     const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
-    const periodEnd = new Date(year, month, 0).toISOString().slice(0, 10);
+    const periodEnd = toLocalDateString(new Date(year, month, 0));
 
     const leavesResult = await db.query(
       `SELECT leave_type, SUM(working_days) AS days

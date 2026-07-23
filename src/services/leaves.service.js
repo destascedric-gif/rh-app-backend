@@ -48,7 +48,12 @@ const getEasterDate = (year) => {
   const m = Math.floor((a + 11 * h + 22 * l) / 451);
   const month = Math.floor((h + l - 7 * m + 114) / 31);
   const day   = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(year, month - 1, day);
+  // Construction en UTC (pas le constructeur local) : la suite du calcul
+  // (Ascension, Pentecôte...) additionne des jours exacts en millisecondes
+  // puis relit la date via toISOString() (UTC) — un point de départ en heure
+  // locale décalerait tous les jours fériés mobiles d'un jour dans un fuseau
+  // en avance sur UTC (ex. Europe/Paris), et ferait rater le vrai jour férié.
+  return new Date(Date.UTC(year, month - 1, day));
 };
 
 /**

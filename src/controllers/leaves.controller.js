@@ -1,6 +1,7 @@
 const db          = require('../config/db');
 const { countWorkingDays, computeLegalBalance } = require('../services/leaves.service');
 const { sendLeaveApproved, sendLeaveRefused, sendLeaveRequestToAdmin } = require('../services/mail.service');
+const { toLocalDateString } = require('../utils/date');
 
 const LEAVE_TYPES = [
   'Congés payés',
@@ -318,6 +319,32 @@ const reviewRequest = async (req, res) => {
          WHERE user_id = $2 AND leave_type = 'Congés payés' AND year = $3`,
         [request.working_days, request.employee_id, year]
       );
+    }
+
+    // Si approuvé : intègre automatiquement le congé dans le planning, jour
+    // par jour, en créneaux de type "congé" (ou "absence" pour maladie /
+    // sans solde) — écrase un éventuel créneau de travail déjà prévu ce jour.
+    if (status === 'approuvé') {
+      const shiftType = ['Congé maladie', 'Congé sans solde'].includes(request.leave_type)
+        ? 'absence' : 'conge';
+
+      const dates = [];
+      const cursor = new Date(request.start_date);
+      const end    = new Date(request.end_date);
+      while (cursor <= end) {
+        dates.push(toLocalDateString(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      for (const date of dates) {
+        await db.query(
+          `INSERT INTO shifts (user_id, company_id, date, start_time, end_time, note, type, created_by)
+           VALUES ($1, $2, $3, '00:00', '23:59', $4, $5, $6)
+           ON CONFLICT (user_id, date) DO UPDATE SET
+             start_time = '00:00', end_time = '23:59', note = $4, type = $5, updated_at = NOW()`,
+          [request.employee_id, companyId, date, request.leave_type, shiftType, adminId]
+        );
+      }
     }
 
     // Notification in-app pour l'employé

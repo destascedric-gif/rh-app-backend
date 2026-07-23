@@ -1,6 +1,7 @@
 const db                  = require('../config/db');
 const { computePayroll }  = require('../services/payroll.service');
 const { generatePayslipPDF } = require('../services/pdf.service');
+const { toLocalDateString } = require('../utils/date');
 
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin',
                  'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -59,7 +60,7 @@ const getCompanyPolicy = async (companyId) => {
 // Construit les paramètres de calcul de paie pour un employé sur un mois donné
 const buildPayrollInputs = async (employee, companyId, month, year) => {
   const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
-  const periodEnd    = new Date(year, month, 0).toISOString().slice(0, 10);
+  const periodEnd    = toLocalDateString(new Date(year, month, 0));
 
   const [scheduledHours, unpaidLeaveDays, policy] = await Promise.all([
     getScheduledHours(employee.id, companyId, periodStart, periodEnd),
