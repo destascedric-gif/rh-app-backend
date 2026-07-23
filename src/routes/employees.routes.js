@@ -29,6 +29,7 @@ router.get   ('/:id/timesheets', isAdmin, ctrl.getTimesheets); // Pointage
 router.post  ('/:id/timesheets', isAdmin, ctrl.addTimesheet);  // Ajouter une entrée
 router.put   ('/:id/timesheets/:timesheetId', isAdmin, ctrl.updateTimesheet); // Modifier une entrée
 router.delete('/:id/timesheets/:timesheetId', isAdmin, ctrl.deleteTimesheet); // Supprimer une entrée
+router.patch ('/:id/timesheets/:timesheetId/status', isAdmin, ctrl.reviewTimesheet); // Valider/refuser
 router.get   ('/:id/monthly-summary', isAdmin, ctrl.getMonthlySummary); // Récap mensuel
 
 module.exports = router;

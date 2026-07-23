@@ -267,7 +267,7 @@ const computeTotalHours = (clockIn, clockOut, breakMinutes) => {
 
 const fetchTimesheets = async ({ userId, companyId, month, year }) => {
   let query = `
-    SELECT id, date, clock_in, clock_out, break_minutes, total_hours, note
+    SELECT id, date, clock_in, clock_out, break_minutes, total_hours, note, status
     FROM timesheets
     WHERE user_id = $1 AND company_id = $2`;
   const params = [userId, companyId];
@@ -282,23 +282,25 @@ const fetchTimesheets = async ({ userId, companyId, month, year }) => {
   return result.rows;
 };
 
-// Crée ou met à jour (upsert) l'entrée de pointage d'un jour donné
-const upsertTimesheet = async ({ userId, companyId, date, clockIn, clockOut, breakMinutes, note }) => {
+// Crée ou met à jour (upsert) l'entrée de pointage d'un jour donné.
+// status = 'validé' quand c'est l'admin qui saisit/corrige, 'en_attente'
+// quand c'est l'employé lui-même (doit être validé avant de compter).
+const upsertTimesheet = async ({ userId, companyId, date, clockIn, clockOut, breakMinutes, note, status }) => {
   const totalHours = computeTotalHours(clockIn, clockOut, breakMinutes);
   const result = await db.query(
-    `INSERT INTO timesheets (user_id, company_id, date, clock_in, clock_out, break_minutes, total_hours, note)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    `INSERT INTO timesheets (user_id, company_id, date, clock_in, clock_out, break_minutes, total_hours, note, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      ON CONFLICT (user_id, date) DO UPDATE SET
        clock_in = EXCLUDED.clock_in, clock_out = EXCLUDED.clock_out,
        break_minutes = EXCLUDED.break_minutes, total_hours = EXCLUDED.total_hours,
-       note = EXCLUDED.note
-     RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note`,
-    [userId, companyId, date, clockIn || null, clockOut || null, breakMinutes || 0, totalHours, note || null]
+       note = EXCLUDED.note, status = EXCLUDED.status
+     RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note, status`,
+    [userId, companyId, date, clockIn || null, clockOut || null, breakMinutes || 0, totalHours, note || null, status]
   );
   return result.rows[0];
 };
 
-// POST /api/employees/:id/timesheets (admin)
+// POST /api/employees/:id/timesheets (admin) — toujours validé d'emblée
 const addTimesheet = async (req, res) => {
   const { companyId } = req.user;
   const { id } = req.params;
@@ -307,7 +309,7 @@ const addTimesheet = async (req, res) => {
   if (!date) return res.status(400).json({ message: 'La date est requise.' });
 
   try {
-    const row = await upsertTimesheet({ userId: id, companyId, date, clockIn, clockOut, breakMinutes, note });
+    const row = await upsertTimesheet({ userId: id, companyId, date, clockIn, clockOut, breakMinutes, note, status: 'validé' });
     res.status(201).json(row);
   } catch (err) {
     console.error(err);
@@ -315,7 +317,7 @@ const addTimesheet = async (req, res) => {
   }
 };
 
-// PUT /api/employees/:id/timesheets/:timesheetId (admin)
+// PUT /api/employees/:id/timesheets/:timesheetId (admin) — valide au passage
 const updateTimesheet = async (req, res) => {
   const { companyId } = req.user;
   const { id, timesheetId } = req.params;
@@ -324,10 +326,35 @@ const updateTimesheet = async (req, res) => {
 
   try {
     const result = await db.query(
-      `UPDATE timesheets SET clock_in = $1, clock_out = $2, break_minutes = $3, total_hours = $4, note = $5
+      `UPDATE timesheets SET clock_in = $1, clock_out = $2, break_minutes = $3, total_hours = $4, note = $5, status = 'validé'
        WHERE id = $6 AND user_id = $7 AND company_id = $8
-       RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note`,
+       RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note, status`,
       [clockIn || null, clockOut || null, breakMinutes || 0, totalHours, note || null, timesheetId, id, companyId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: 'Pointage introuvable.' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// PATCH /api/employees/:id/timesheets/:timesheetId/status (admin) — valider/refuser une saisie employé
+const reviewTimesheet = async (req, res) => {
+  const { companyId } = req.user;
+  const { id, timesheetId } = req.params;
+  const { status } = req.body;
+
+  if (!['validé', 'refusé'].includes(status)) {
+    return res.status(400).json({ message: "Statut invalide. Valeurs : validé, refusé." });
+  }
+
+  try {
+    const result = await db.query(
+      `UPDATE timesheets SET status = $1, updated_at = NOW()
+       WHERE id = $2 AND user_id = $3 AND company_id = $4
+       RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note, status`,
+      [status, timesheetId, id, companyId]
     );
     if (!result.rows[0]) return res.status(404).json({ message: 'Pointage introuvable.' });
     res.json(result.rows[0]);
@@ -371,7 +398,7 @@ const getMyTimesheets = async (req, res) => {
   }
 };
 
-// POST /api/employees/me/timesheets
+// POST /api/employees/me/timesheets — saisie employé : toujours en attente de validation
 const addMyTimesheet = async (req, res) => {
   const { id: userId, companyId } = req.user;
   const { date, clockIn, clockOut, breakMinutes, note } = req.body;
@@ -379,7 +406,7 @@ const addMyTimesheet = async (req, res) => {
   if (!date) return res.status(400).json({ message: 'La date est requise.' });
 
   try {
-    const row = await upsertTimesheet({ userId, companyId, date, clockIn, clockOut, breakMinutes, note });
+    const row = await upsertTimesheet({ userId, companyId, date, clockIn, clockOut, breakMinutes, note, status: 'en_attente' });
     res.status(201).json(row);
   } catch (err) {
     console.error(err);
@@ -387,7 +414,7 @@ const addMyTimesheet = async (req, res) => {
   }
 };
 
-// PUT /api/employees/me/timesheets/:timesheetId
+// PUT /api/employees/me/timesheets/:timesheetId — toute modification employé repasse en attente
 const updateMyTimesheet = async (req, res) => {
   const { id: userId, companyId } = req.user;
   const { timesheetId } = req.params;
@@ -396,9 +423,9 @@ const updateMyTimesheet = async (req, res) => {
 
   try {
     const result = await db.query(
-      `UPDATE timesheets SET clock_in = $1, clock_out = $2, break_minutes = $3, total_hours = $4, note = $5
+      `UPDATE timesheets SET clock_in = $1, clock_out = $2, break_minutes = $3, total_hours = $4, note = $5, status = 'en_attente'
        WHERE id = $6 AND user_id = $7 AND company_id = $8
-       RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note`,
+       RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note, status`,
       [clockIn || null, clockOut || null, breakMinutes || 0, totalHours, note || null, timesheetId, userId, companyId]
     );
     if (!result.rows[0]) return res.status(404).json({ message: 'Pointage introuvable.' });
@@ -442,10 +469,12 @@ const getMonthlySummary = async (req, res) => {
   }
 
   try {
+    // Seules les heures validées comptent dans le récap (une saisie employé
+    // en attente ne doit pas gonfler le total tant que l'admin ne l'a pas confirmée).
     const hoursResult = await db.query(
       `SELECT COALESCE(SUM(total_hours), 0) AS total_hours, COUNT(*) FILTER (WHERE clock_in IS NOT NULL) AS days_worked
        FROM timesheets
-       WHERE user_id = $1 AND company_id = $2
+       WHERE user_id = $1 AND company_id = $2 AND status = 'validé'
          AND EXTRACT(MONTH FROM date) = $3 AND EXTRACT(YEAR FROM date) = $4`,
       [id, companyId, month, year]
     );
@@ -494,6 +523,7 @@ module.exports = {
   addTimesheet,
   updateTimesheet,
   deleteTimesheet,
+  reviewTimesheet,
   getMyTimesheets,
   addMyTimesheet,
   updateMyTimesheet,
