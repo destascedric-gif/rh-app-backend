@@ -144,7 +144,7 @@ const submitRequest = async (req, res) => {
       const { balance_days, used_days } = await getOrComputeCPBalance(userId, companyId, year);
       const available = balance_days - used_days;
       if (workingDays > available) {
-        balanceWarning = `Solde insuffisant au moment de la demande (disponible : ${available} j, demandé : ${workingDays} j). L'administrateur peut tout de même l'approuver.`;
+        balanceWarning = { available, requested: workingDays };
       }
     }
 
@@ -174,7 +174,7 @@ const submitRequest = async (req, res) => {
     await db.query(
       `INSERT INTO leave_notifications (user_id, request_id, message)
        VALUES ($1, $2, $3)`,
-      [userId, requestId, `Votre demande de ${leaveType} du ${startDate} au ${endDate} a bien été envoyée.${balanceWarning ? ' ⚠ ' + balanceWarning : ''}`]
+      [userId, requestId, `Votre demande de ${leaveType} du ${startDate} au ${endDate} a bien été envoyée.`]
     );
 
     // Email à l'admin
