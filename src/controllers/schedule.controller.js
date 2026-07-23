@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { toLocalDateString } = require('../utils/date');
 
 const SHIFT_TYPES = ['travail', 'conge', 'repos', 'absence'];
 
@@ -40,6 +41,7 @@ const enrichShifts = async (shifts) => {
     const netMinutes = computeNetMinutes(s.start_time, s.end_time, breaks);
     return {
       ...s,
+      date:        toLocalDateString(s.date),
       breaks,
       net_hours:   parseFloat((netMinutes / 60).toFixed(2)),
       net_minutes: netMinutes,

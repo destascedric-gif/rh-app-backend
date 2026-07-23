@@ -313,6 +313,12 @@ const reviewRequest = async (req, res) => {
     // Si approuvé : débite le solde
     if (status === 'approuvé' && request.leave_type === 'Congés payés') {
       const year = new Date(request.start_date).getFullYear();
+      // S'assure que la ligne de solde existe avant de la débiter — sinon,
+      // pour le tout premier congé d'un employé (aucune ligne créée pour
+      // l'instant), l'UPDATE ci-dessous ne trouve aucune ligne et ne fait
+      // rien silencieusement : le jour débité est perdu dès que le solde
+      // est ensuite calculé "à la volée" avec used_days remis à 0.
+      await getOrComputeCPBalance(request.employee_id, companyId, year);
       await db.query(
         `UPDATE leave_balances
          SET used_days = used_days + $1, updated_at = NOW()
