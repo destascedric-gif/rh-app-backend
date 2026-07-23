@@ -492,15 +492,31 @@ const getMonthlySummary = async (req, res) => {
   }
 
   try {
-    // Seules les heures validées comptent dans le récap (une saisie employé
-    // en attente ne doit pas gonfler le total tant que l'admin ne l'a pas confirmée).
-    const hoursResult = await db.query(
-      `SELECT COALESCE(SUM(total_hours), 0) AS total_hours, COUNT(*) FILTER (WHERE clock_in IS NOT NULL) AS days_worked
-       FROM timesheets
-       WHERE user_id = $1 AND company_id = $2 AND status = 'validé'
-         AND EXTRACT(MONTH FROM date) = $3 AND EXTRACT(YEAR FROM date) = $4`,
+    // Les heures travaillées reflètent le planning (shifts), la même source
+    // que la paie — pas les pointages auto-déclarés par l'employé, qui sont
+    // une fonctionnalité distincte (validation d'heures réelles) et peuvent
+    // rester vides même quand le mois est entièrement planifié.
+    const grossResult = await db.query(
+      `SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 3600), 0) AS gross_hours,
+              COUNT(*) AS days_worked
+       FROM shifts s
+       WHERE s.user_id = $1 AND s.company_id = $2 AND s.type = 'travail'
+         AND EXTRACT(MONTH FROM s.date) = $3 AND EXTRACT(YEAR FROM s.date) = $4`,
       [id, companyId, month, year]
     );
+    const breakResult = await db.query(
+      `SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (sb.end_time - sb.start_time)) / 3600), 0) AS break_hours
+       FROM shift_breaks sb
+       JOIN shifts s ON s.id = sb.shift_id
+       WHERE s.user_id = $1 AND s.company_id = $2 AND s.type = 'travail'
+         AND EXTRACT(MONTH FROM s.date) = $3 AND EXTRACT(YEAR FROM s.date) = $4`,
+      [id, companyId, month, year]
+    );
+    const totalHours = Math.max(
+      0,
+      parseFloat(grossResult.rows[0].gross_hours) - parseFloat(breakResult.rows[0].break_hours)
+    );
+    const daysWorked = parseInt(grossResult.rows[0].days_worked, 10) || 0;
 
     const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
     const periodEnd = toLocalDateString(new Date(year, month, 0));
@@ -522,8 +538,8 @@ const getMonthlySummary = async (req, res) => {
     );
 
     res.json({
-      totalHours: parseFloat(hoursResult.rows[0].total_hours) || 0,
-      daysWorked: parseInt(hoursResult.rows[0].days_worked, 10) || 0,
+      totalHours: parseFloat(totalHours.toFixed(2)),
+      daysWorked,
       leaveDays: leavesResult.rows.map((r) => ({ leaveType: r.leave_type, days: parseFloat(r.days) })),
       payslip: payslipResult.rows[0] || null,
     });
