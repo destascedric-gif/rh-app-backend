@@ -14,6 +14,41 @@ const LEAVE_TYPES = [
 // SOLDES — EMPLOYÉ
 // ─────────────────────────────────────────────
 
+// Calcule (et persiste au passage) le solde de Congés payés d'un employé
+// pour une année de référence donnée — y compris une année future pas
+// encore "vécue", pour ne pas pénaliser une demande anticipée.
+const getOrComputeCPBalance = async (userId, companyId, year) => {
+  const existing = await db.query(
+    `SELECT balance_days, used_days FROM leave_balances
+     WHERE user_id = $1 AND company_id = $2 AND leave_type = 'Congés payés' AND year = $3`,
+    [userId, companyId, year]
+  );
+  if (existing.rows[0]) {
+    return {
+      balance_days: parseFloat(existing.rows[0].balance_days),
+      used_days:    parseFloat(existing.rows[0].used_days),
+    };
+  }
+
+  const userResult = await db.query('SELECT hire_date FROM users WHERE id = $1', [userId]);
+  const hireDate = userResult.rows[0]?.hire_date;
+  if (!hireDate) return { balance_days: 0, used_days: 0 };
+
+  const companyResult = await db.query('SELECT leave_accrual_per_month FROM company WHERE id = $1', [companyId]);
+  const accrualPerMonth = companyResult.rows[0]?.leave_accrual_per_month ?? 2.5;
+  const legalDays = computeLegalBalance(hireDate, year, accrualPerMonth);
+
+  await db.query(
+    `INSERT INTO leave_balances (user_id, company_id, leave_type, balance_days, year)
+     VALUES ($1, $2, 'Congés payés', $3, $4)
+     ON CONFLICT (user_id, leave_type, year)
+     DO UPDATE SET balance_days = $3, updated_at = NOW()`,
+    [userId, companyId, legalDays, year]
+  );
+
+  return { balance_days: legalDays, used_days: 0 };
+};
+
 // GET /api/leaves/balance
 // Retourne les soldes de l'employé connecté pour l'année en cours
 const getMyBalance = async (req, res) => {
@@ -21,7 +56,6 @@ const getMyBalance = async (req, res) => {
   const year = new Date().getFullYear();
 
   try {
-    // Récupère ou initialise les soldes
     const result = await db.query(
       `SELECT leave_type, balance_days, used_days
        FROM leave_balances
@@ -29,7 +63,6 @@ const getMyBalance = async (req, res) => {
       [userId, companyId, year]
     );
 
-    // Si pas encore de solde CP, on le calcule depuis la date d'embauche
     const balances = {};
     LEAVE_TYPES.forEach((t) => { balances[t] = { balance_days: 0, used_days: 0 }; });
     result.rows.forEach((r) => {
@@ -39,25 +72,8 @@ const getMyBalance = async (req, res) => {
       };
     });
 
-    // Calcul automatique CP si non initialisé
     if (balances['Congés payés'].balance_days === 0) {
-      const userResult = await db.query('SELECT hire_date FROM users WHERE id = $1', [userId]);
-      const hireDate   = userResult.rows[0]?.hire_date;
-      if (hireDate) {
-        const companyResult = await db.query('SELECT leave_accrual_per_month FROM company WHERE id = $1', [companyId]);
-        const accrualPerMonth = companyResult.rows[0]?.leave_accrual_per_month ?? 2.5;
-        const legalDays = computeLegalBalance(hireDate, year, accrualPerMonth);
-        balances['Congés payés'].balance_days = legalDays;
-
-        // Persiste le solde calculé
-        await db.query(
-          `INSERT INTO leave_balances (user_id, company_id, leave_type, balance_days, year)
-           VALUES ($1, $2, 'Congés payés', $3, $4)
-           ON CONFLICT (user_id, leave_type, year)
-           DO UPDATE SET balance_days = $3, updated_at = NOW()`,
-          [userId, companyId, legalDays, year]
-        );
-      }
+      balances['Congés payés'] = await getOrComputeCPBalance(userId, companyId, year);
     }
 
     res.json({ year, balances });
@@ -119,20 +135,16 @@ const submitRequest = async (req, res) => {
       return res.status(400).json({ message: 'La période sélectionnée ne contient aucun jour ouvré.' });
     }
 
-    // Vérifie le solde disponible pour les CP
+    // Calcule le solde réellement acquis pour l'année concernée par la demande
+    // (même si elle est future) — juste à titre d'avertissement, sans bloquer :
+    // l'admin garde la décision finale.
+    let balanceWarning = null;
     if (leaveType === 'Congés payés') {
-      const year    = new Date(startDate).getFullYear();
-      const balance = await db.query(
-        `SELECT balance_days, used_days FROM leave_balances
-         WHERE user_id = $1 AND leave_type = 'Congés payés' AND year = $2`,
-        [userId, year]
-      );
-      const row       = balance.rows[0];
-      const available = row ? (parseFloat(row.balance_days) - parseFloat(row.used_days)) : 0;
+      const year = new Date(startDate).getFullYear();
+      const { balance_days, used_days } = await getOrComputeCPBalance(userId, companyId, year);
+      const available = balance_days - used_days;
       if (workingDays > available) {
-        return res.status(400).json({
-          message: `Solde insuffisant. Disponible : ${available} jour(s), demandé : ${workingDays} jour(s).`,
-        });
+        balanceWarning = `Solde insuffisant au moment de la demande (disponible : ${available} j, demandé : ${workingDays} j). L'administrateur peut tout de même l'approuver.`;
       }
     }
 
@@ -162,7 +174,7 @@ const submitRequest = async (req, res) => {
     await db.query(
       `INSERT INTO leave_notifications (user_id, request_id, message)
        VALUES ($1, $2, $3)`,
-      [userId, requestId, `Votre demande de ${leaveType} du ${startDate} au ${endDate} a bien été envoyée.`]
+      [userId, requestId, `Votre demande de ${leaveType} du ${startDate} au ${endDate} a bien été envoyée.${balanceWarning ? ' ⚠ ' + balanceWarning : ''}`]
     );
 
     // Email à l'admin
@@ -178,7 +190,7 @@ const submitRequest = async (req, res) => {
       emailSent = false;
     }
 
-    res.status(201).json({ message: 'Demande envoyée.', requestId, workingDays, emailSent });
+    res.status(201).json({ message: 'Demande envoyée.', requestId, workingDays, emailSent, balanceWarning });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
