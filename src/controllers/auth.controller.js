@@ -137,7 +137,19 @@ const setupCompany = async (req, res) => {
     const admin = userResult.rows[0];
     const token = generateToken(admin);
 
-    res.status(201).json({ message: 'Entreprise créée.', token, companyId });
+    res.status(201).json({
+      message: 'Entreprise créée.',
+      token,
+      companyId,
+      user: {
+        id: admin.id,
+        firstName: admin.first_name,
+        lastName: admin.last_name,
+        email: admin.email,
+        role: admin.role,
+        companyId: admin.company_id,
+      },
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
