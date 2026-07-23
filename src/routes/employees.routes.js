@@ -14,6 +14,9 @@ router.post  ('/me/timesheets',                ctrl.addMyTimesheet);
 router.put   ('/me/timesheets/:timesheetId',   ctrl.updateMyTimesheet);
 router.delete('/me/timesheets/:timesheetId',   ctrl.deleteMyTimesheet);
 
+// Pointages en attente de validation, toute l'entreprise (tableau de bord)
+router.get   ('/timesheets/pending', isAdmin, ctrl.getPendingTimesheets);
+
 // ── Liste & fiche ──────────────────────────────────────
 router.get   ('/',    isAdmin, ctrl.getEmployees);        // Liste tous les employés
 router.get   ('/:id', isAdmin, ctrl.getEmployee);         // Fiche détaillée

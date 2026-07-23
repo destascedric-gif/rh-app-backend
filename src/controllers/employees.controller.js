@@ -1,6 +1,29 @@
 const db = require('../config/db');
 const { toLocalDateString } = require('../utils/date');
 
+// GET /api/employees/timesheets/pending — tous les pointages en attente de
+// validation de l'entreprise (pour le tableau de bord admin)
+const getPendingTimesheets = async (req, res) => {
+  const { companyId } = req.user;
+
+  try {
+    const result = await db.query(
+      `SELECT t.id, t.date, t.clock_in, t.clock_out, t.break_minutes, t.total_hours, t.note,
+              u.id AS employee_id, u.first_name || ' ' || u.last_name AS employee_name,
+              u.job_title, u.photo_url
+       FROM timesheets t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.company_id = $1 AND t.status = 'en_attente'
+       ORDER BY t.date DESC`,
+      [companyId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
 // ─────────────────────────────────────────────
 // LISTE DES EMPLOYÉS
 // ─────────────────────────────────────────────
@@ -351,7 +374,7 @@ const reviewTimesheet = async (req, res) => {
 
   try {
     const result = await db.query(
-      `UPDATE timesheets SET status = $1, updated_at = NOW()
+      `UPDATE timesheets SET status = $1
        WHERE id = $2 AND user_id = $3 AND company_id = $4
        RETURNING id, date, clock_in, clock_out, break_minutes, total_hours, note, status`,
       [status, timesheetId, id, companyId]
@@ -529,4 +552,5 @@ module.exports = {
   updateMyTimesheet,
   deleteMyTimesheet,
   getMonthlySummary,
+  getPendingTimesheets,
 };
