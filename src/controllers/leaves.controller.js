@@ -175,7 +175,7 @@ const submitRequest = async (req, res) => {
     await db.query(
       `INSERT INTO leave_notifications (user_id, request_id, message)
        VALUES ($1, $2, $3)`,
-      [userId, requestId, `Votre demande de ${leaveType} du ${startDate} au ${endDate} a bien été envoyée.`]
+      [userId, requestId, `Votre demande de ${leaveType} du ${new Date(startDate).toLocaleDateString('fr-FR')} au ${new Date(endDate).toLocaleDateString('fr-FR')} a bien été envoyée.`]
     );
 
     // Email à l'admin
@@ -353,10 +353,14 @@ const reviewRequest = async (req, res) => {
       }
     }
 
-    // Notification in-app pour l'employé
+    // Notification in-app pour l'employé — dates formatées en français, pas
+    // le résultat brut de Date.toString() qu'on obtient en interpolant
+    // directement un objet Date dans un template literal.
+    const startLabel = new Date(request.start_date).toLocaleDateString('fr-FR');
+    const endLabel   = new Date(request.end_date).toLocaleDateString('fr-FR');
     const notifMsg = status === 'approuvé'
-      ? `✅ Votre demande de ${request.leave_type} (${request.start_date} → ${request.end_date}) a été approuvée.`
-      : `❌ Votre demande de ${request.leave_type} (${request.start_date} → ${request.end_date}) a été refusée.${adminNote ? ` Motif : ${adminNote}` : ''}`;
+      ? `✅ Votre demande de ${request.leave_type} (${startLabel} → ${endLabel}) a été approuvée.`
+      : `❌ Votre demande de ${request.leave_type} (${startLabel} → ${endLabel}) a été refusée.${adminNote ? ` Motif : ${adminNote}` : ''}`;
 
     await db.query(
       `INSERT INTO leave_notifications (user_id, request_id, message)
