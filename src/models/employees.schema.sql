@@ -45,6 +45,13 @@ CREATE TABLE IF NOT EXISTS payslips (
   UNIQUE (user_id, period_month, period_year)
 );
 
+-- Photo exacte du calcul (lignes de cotisations, heures sup, absence) au
+-- moment de la génération — un bulletin de paie est un document historique,
+-- il ne doit pas être recalculé différemment à chaque re-téléchargement
+-- (perte du détail heures sup/absence, ou dérive si computePayroll change).
+ALTER TABLE payslips
+  ADD COLUMN IF NOT EXISTS cotisations_snapshot JSONB;
+
 -- Table : timesheets (pointage)
 CREATE TABLE IF NOT EXISTS timesheets (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

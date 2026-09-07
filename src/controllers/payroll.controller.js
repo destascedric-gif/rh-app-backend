@@ -190,11 +190,11 @@ const generatePayslip = async (req, res) => {
     };
 
     const insertResult = await db.query(
-      `INSERT INTO payslips (user_id, company_id, period_month, period_year, gross_amount, net_amount)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO payslips (user_id, company_id, period_month, period_year, gross_amount, net_amount, cotisations_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [userId, companyId, payslip.period_month, payslip.period_year,
-       payslip.gross_amount, payslip.net_amount]
+       payslip.gross_amount, payslip.net_amount, JSON.stringify(cotisations)]
     );
 
     payslip.id = insertResult.rows[0].id;
@@ -255,10 +255,12 @@ const downloadPayslip = async (req, res) => {
     const row = result.rows[0];
     if (!row) return res.status(404).json({ message: 'Bulletin introuvable.' });
 
-    // On recalcule les cotisations à partir du brut réellement stocké sur ce
-    // bulletin (déjà ajusté heures sup / absence à la génération), pas du
-    // salaire contractuel actuel de l'employé qui a pu changer depuis.
-    const cotisations = computePayroll({ grossSalary: row.gross_amount });
+    // Rejoue le détail exact du calcul d'origine (dont heures sup/absence)
+    // plutôt que de le recalculer — un bulletin est un document historique.
+    // Filet de sécurité pour les bulletins générés avant l'ajout de cette
+    // colonne : on retombe sur un recalcul à partir du brut stocké (perd le
+    // détail heures sup/absence, mais les montants restent corrects).
+    const cotisations = row.cotisations_snapshot ?? computePayroll({ grossSalary: row.gross_amount });
 
     const balanceResult = await db.query(
       `SELECT leave_type, balance_days, used_days
@@ -355,10 +357,10 @@ const generateAllPayslips = async (req, res) => {
         const cotisations    = computePayroll(payrollInputs);
 
         await db.query(
-          `INSERT INTO payslips (user_id, company_id, period_month, period_year, gross_amount, net_amount)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO payslips (user_id, company_id, period_month, period_year, gross_amount, net_amount, cotisations_snapshot)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [emp.id, companyId, month, year,
-           cotisations.adjustedGross, cotisations.netSalary]
+           cotisations.adjustedGross, cotisations.netSalary, JSON.stringify(cotisations)]
         );
         results.success.push(emp.id);
       } catch (e) {
