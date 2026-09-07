@@ -37,22 +37,7 @@ const sendInviteEmail = async (email, firstName, inviteToken) => {
 };
 
 // ─────────────────────────────────────────────
-// VÉRIFICATION DU SETUP INITIAL
-// ─────────────────────────────────────────────
-
-// GET /api/auth/setup-status
-// Retourne si le setup initial a déjà été fait
-const getSetupStatus = async (req, res) => {
-  try {
-    const result = await db.query('SELECT setup_complete FROM app_config LIMIT 1');
-    res.json({ setupComplete: result.rows[0]?.setup_complete ?? false });
-  } catch (err) {
-    res.status(500).json({ message: 'Erreur serveur.' });
-  }
-};
-
-// ─────────────────────────────────────────────
-// ÉTAPE 1 : CRÉATION DU COMPTE ADMIN
+// ÉTAPE 1 : CRÉATION DU COMPTE ADMIN (inscription d'une nouvelle entreprise)
 // ─────────────────────────────────────────────
 
 // POST /api/auth/setup/admin
@@ -63,13 +48,11 @@ const setupAdmin = async (req, res) => {
     return res.status(400).json({ message: 'Tous les champs obligatoires doivent être remplis.' });
   }
 
-  try {
-    // Vérifie que le setup n'a pas déjà été fait
-    const config = await db.query('SELECT setup_complete FROM app_config LIMIT 1');
-    if (config.rows[0]?.setup_complete) {
-      return res.status(403).json({ message: 'Setup déjà effectué.' });
-    }
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères.' });
+  }
 
+  try {
     // Vérifie que l'email n'existe pas déjà
     const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
@@ -112,13 +95,18 @@ const setupCompany = async (req, res) => {
     return res.status(400).json({ message: 'Le nom de l\'entreprise est obligatoire.' });
   }
 
+  // SIRET optionnel : une chaîne vide viole la contrainte UNIQUE dès qu'une
+  // deuxième entreprise le laisse aussi vide (NULL, lui, n'entre jamais en
+  // conflit avec un autre NULL).
+  const cleanSiret = siret && siret.trim() ? siret.trim() : null;
+
   try {
     // Création de l'entreprise
     const companyResult = await db.query(
       `INSERT INTO company (name, siret, address, city, postal_code, sector)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [name, siret, address, city, postalCode, sector]
+      [name, cleanSiret, address, city, postalCode, sector]
     );
 
     const companyId = companyResult.rows[0].id;
@@ -128,9 +116,6 @@ const setupCompany = async (req, res) => {
       'UPDATE users SET company_id = $1 WHERE id = $2',
       [companyId, adminId]
     );
-
-    // Marque le setup comme terminé
-    await db.query('UPDATE app_config SET setup_complete = TRUE');
 
     // Nouveau token avec companyId
     const userResult = await db.query('SELECT * FROM users WHERE id = $1', [adminId]);
@@ -419,7 +404,6 @@ const changePassword = async (req, res) => {
 };
 
 module.exports = {
-  getSetupStatus,
   setupAdmin,
   setupCompany,
   login,

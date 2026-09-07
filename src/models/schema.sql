@@ -41,17 +41,6 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at       TIMESTAMP DEFAULT NOW()
 );
 
--- Table : app_config (état du setup initial)
-CREATE TABLE IF NOT EXISTS app_config (
-  id             SERIAL PRIMARY KEY,
-  setup_complete BOOLEAN DEFAULT FALSE,             -- false = premier lancement
-  created_at     TIMESTAMP DEFAULT NOW()
-);
-
--- Insertion de la config initiale
-INSERT INTO app_config (setup_complete) VALUES (FALSE)
-  ON CONFLICT DO NOTHING;
-
 -- Index pour les recherches fréquentes
 CREATE INDEX IF NOT EXISTS idx_users_email        ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_invite_token ON users(invite_token);
