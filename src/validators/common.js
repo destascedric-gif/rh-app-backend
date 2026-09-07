@@ -35,9 +35,19 @@ const optionalEmail = () => {
   );
 };
 
+// Les colonnes TIME de Postgres reviennent en "HH:MM:SS" (ex. depuis les
+// modèles de créneau glissés-déposés sur le planning), alors qu'un
+// <input type="time"> renvoie "HH:MM" — les deux doivent être acceptés.
+// On normalise systématiquement vers "HH:MM" pour que le reste du code
+// (comparaisons de chaînes entre horaires) ne mélange jamais les deux
+// formats, ce qui fausserait silencieusement une comparaison.
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+
 const timeString = (label) => {
   const message = `${label} doit être au format HH:MM.`;
-  return z.string({ error: message }).regex(/^([01]\d|2[0-3]):[0-5]\d$/, message);
+  return z.string({ error: message })
+    .regex(TIME_RE, message)
+    .transform((v) => v.slice(0, 5));
 };
 
 // Même logique que optionalEnum : évite le message d'union générique quand
@@ -46,7 +56,7 @@ const optionalTime = (label) => {
   const message = `${label} doit être au format HH:MM.`;
   return z.preprocess(
     (val) => (val === '' ? undefined : val),
-    z.string({ error: message }).regex(/^([01]\d|2[0-3]):[0-5]\d$/, message).optional()
+    z.string({ error: message }).regex(TIME_RE, message).transform((v) => v.slice(0, 5)).optional()
   );
 };
 
