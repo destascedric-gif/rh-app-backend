@@ -44,14 +44,6 @@ const sendInviteEmail = async (email, firstName, inviteToken) => {
 const setupAdmin = async (req, res) => {
   const { firstName, lastName, email, password, phone } = req.body;
 
-  if (!firstName || !lastName || !email || !password) {
-    return res.status(400).json({ message: 'Tous les champs obligatoires doivent être remplis.' });
-  }
-
-  if (password.length < 8) {
-    return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères.' });
-  }
-
   try {
     // Vérifie que l'email n'existe pas déjà
     const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
@@ -90,10 +82,6 @@ const setupAdmin = async (req, res) => {
 const setupCompany = async (req, res) => {
   const { name, siret, address, city, postalCode, sector } = req.body;
   const adminId = req.user.id;
-
-  if (!name) {
-    return res.status(400).json({ message: 'Le nom de l\'entreprise est obligatoire.' });
-  }
 
   // SIRET optionnel : une chaîne vide viole la contrainte UNIQUE dès qu'une
   // deuxième entreprise le laisse aussi vide (NULL, lui, n'entre jamais en
@@ -149,10 +137,6 @@ const setupCompany = async (req, res) => {
 const login = async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email et mot de passe requis.' });
-  }
-
   try {
     const result = await db.query(
       'SELECT * FROM users WHERE email = $1 AND is_active = TRUE',
@@ -201,10 +185,6 @@ const login = async (req, res) => {
 const inviteEmployee = async (req, res) => {
   const { firstName, lastName, email, jobTitle, hireDate, grossSalary, workTime, weeklyHours } = req.body;
   const companyId = req.user.companyId;
-
-  if (!firstName || !lastName || !email) {
-    return res.status(400).json({ message: 'Prénom, nom et email sont obligatoires.' });
-  }
 
   try {
     // Vérifie que l'email n'existe pas déjà
@@ -307,14 +287,6 @@ const resendInvite = async (req, res) => {
 const acceptInvite = async (req, res) => {
   const { token, password } = req.body;
 
-  if (!token || !password) {
-    return res.status(400).json({ message: 'Token et mot de passe requis.' });
-  }
-
-  if (password.length < 8) {
-    return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères.' });
-  }
-
   try {
     const result = await db.query(
       `SELECT * FROM users
@@ -370,13 +342,6 @@ const acceptInvite = async (req, res) => {
 const changePassword = async (req, res) => {
   const { id: userId } = req.user;
   const { currentPassword, newPassword } = req.body;
-
-  if (!currentPassword || !newPassword) {
-    return res.status(400).json({ message: 'Mot de passe actuel et nouveau mot de passe requis.' });
-  }
-  if (newPassword.length < 8) {
-    return res.status(400).json({ message: 'Le nouveau mot de passe doit faire au moins 8 caractères.' });
-  }
 
   try {
     const result = await db.query('SELECT password_hash FROM users WHERE id = $1', [userId]);

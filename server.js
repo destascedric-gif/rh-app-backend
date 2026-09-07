@@ -1,5 +1,6 @@
 const express = require('express');
 const cors    = require('cors');
+const helmet  = require('helmet');
 require('dotenv').config();
 
 const authRoutes     = require('./src/routes/auth.routes');
@@ -12,6 +13,8 @@ const shiftTemplatesRoutes = require('./src/routes/shiftTemplates.routes');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
+
+app.use(helmet());
 
 // L'app est accessible depuis plusieurs origines (domaine propre + alias
 // Vercel) : on autorise explicitement chacune plutôt qu'une seule.
