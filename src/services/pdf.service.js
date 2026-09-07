@@ -3,7 +3,16 @@ const PDFDocument = require('pdfkit');
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin',
                  'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-const fmt = (n) => Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// toLocaleString('fr-FR') separe les milliers avec une espace fine insecable
+// (U+202F) que la police PDF standard ne sait pas afficher : elle la rend
+// comme un caractere de substitution visible (ex. "2 /800,00" au lieu de
+// "2 800,00"). On la remplace par une espace normale, toujours lisible.
+const NARROW_NBSP = String.fromCharCode(0x202f);
+const NBSP        = String.fromCharCode(0x00a0);
+const fmt = (n) => Number(n)
+  .toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  .split(NARROW_NBSP).join(' ')
+  .split(NBSP).join(' ');
 const fmtPct = (t) => `${(t * 100).toFixed(2)} %`;
 
 /**
@@ -143,7 +152,7 @@ const generatePayslipPDF = ({
     recap.push({ label: 'Net imposable',     val: fmt(cotisations.netImposable) });
 
     y += 12;
-    const recapHeight = 38 + recap.length * 14;
+    const recapHeight = 34 + recap.length * 14;
     doc.rect(45, y, W, recapHeight).fill(GRAY).stroke(BORDER);
 
     doc.fillColor(DARK).font('Helvetica-Bold').fontSize(10)
@@ -156,14 +165,18 @@ const generatePayslipPDF = ({
          .text(r.val, 380, y + 28 + i * 14, { width: 120, align: 'right' });
     });
 
-    // NET À PAYER (mis en valeur)
-    doc.rect(350, y + 10, 190, 32).fill(BLUE);
-    doc.fillColor('#ffffff').font('Helvetica').fontSize(8)
-       .text('NET À PAYER', 360, y + 16);
-    doc.font('Helvetica-Bold').fontSize(16)
-       .text(`${fmt(payslip.net_amount)} €`, 360, y + 26, { width: 170, align: 'right' });
+    y += recapHeight + 10;
 
-    y += recapHeight + 12;
+    // NET À PAYER (mis en valeur) — sous le récapitulatif, jamais par-dessus
+    // (une bande pleine largeur superposée aux lignes du dessus effaçait
+    // visuellement le premier montant du récap).
+    doc.rect(45, y, W, 34).fill(BLUE);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11)
+       .text('NET À PAYER', 55, y + 11);
+    doc.font('Helvetica-Bold').fontSize(16)
+       .text(`${fmt(payslip.net_amount)} €`, 350, y + 8, { width: 180, align: 'right' });
+
+    y += 34 + 12;
 
     // ── CONGÉS ───────────────────────────────────────────
     if (leaveBalance) {
