@@ -1,7 +1,8 @@
+require('dotenv').config();
+const Sentry  = require('./src/config/sentry');
 const express = require('express');
 const cors    = require('cors');
 const helmet  = require('helmet');
-require('dotenv').config();
 
 const authRoutes     = require('./src/routes/auth.routes');
 const employeeRoutes = require('./src/routes/employees.routes');
@@ -43,6 +44,10 @@ app.use('/api/settings',  settingsRoutes);
 app.use('/api/shift-templates', shiftTemplatesRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+// Après toutes les routes, avant app.listen : capture les erreurs non
+// gérées par les try/catch des controllers.
+Sentry.setupExpressErrorHandler(app);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur RH démarré sur le port ${PORT}`);
