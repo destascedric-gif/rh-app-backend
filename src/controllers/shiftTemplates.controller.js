@@ -23,13 +23,6 @@ const createShiftTemplate = async (req, res) => {
   const { companyId } = req.user;
   const { name, startTime, endTime, breakStart, breakEnd } = req.body;
 
-  if (!name || !startTime || !endTime) {
-    return res.status(400).json({ message: 'Nom, heure de début et heure de fin sont requis.' });
-  }
-  if (startTime >= endTime) {
-    return res.status(400).json({ message: "L'heure de début doit être avant l'heure de fin." });
-  }
-
   try {
     const result = await db.query(
       `INSERT INTO shift_templates (company_id, name, start_time, end_time, break_start, break_end)
@@ -49,13 +42,6 @@ const updateShiftTemplate = async (req, res) => {
   const { companyId } = req.user;
   const { id } = req.params;
   const { name, startTime, endTime, breakStart, breakEnd } = req.body;
-
-  if (!name || !startTime || !endTime) {
-    return res.status(400).json({ message: 'Nom, heure de début et heure de fin sont requis.' });
-  }
-  if (startTime >= endTime) {
-    return res.status(400).json({ message: "L'heure de début doit être avant l'heure de fin." });
-  }
 
   try {
     const result = await db.query(

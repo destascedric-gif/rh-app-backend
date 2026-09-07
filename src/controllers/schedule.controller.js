@@ -1,8 +1,6 @@
 const db = require('../config/db');
 const { toLocalDateString } = require('../utils/date');
 
-const SHIFT_TYPES = ['travail', 'conge', 'repos', 'absence'];
-
 // ─────────────────────────────────────────────
 // UTILITAIRES
 // ─────────────────────────────────────────────
@@ -131,25 +129,6 @@ const createShift = async (req, res) => {
   const { companyId, id: adminId } = req.user;
   const { userId, date, startTime, endTime, note, breaks = [], type = 'travail' } = req.body;
 
-  if (!userId || !date || !startTime || !endTime) {
-    return res.status(400).json({ message: 'userId, date, startTime et endTime sont requis.' });
-  }
-
-  if (!SHIFT_TYPES.includes(type)) {
-    return res.status(400).json({ message: 'Type de créneau invalide.' });
-  }
-
-  if (startTime >= endTime) {
-    return res.status(400).json({ message: 'L\'heure de début doit être avant l\'heure de fin.' });
-  }
-
-  // Vérifie que les pauses sont dans les bornes du créneau
-  for (const b of breaks) {
-    if (b.start_time < startTime || b.end_time > endTime || b.start_time >= b.end_time) {
-      return res.status(400).json({ message: `Pause invalide : ${b.start_time} → ${b.end_time}` });
-    }
-  }
-
   // Vérifie que l'employé appartient à l'entreprise
   const empCheck = await db.query(
     'SELECT id FROM users WHERE id = $1 AND company_id = $2',
@@ -209,14 +188,6 @@ const updateShift = async (req, res) => {
   const { companyId } = req.user;
   const { id }        = req.params;
   const { startTime, endTime, note, breaks = [], type = 'travail' } = req.body;
-
-  if (startTime >= endTime) {
-    return res.status(400).json({ message: 'L\'heure de début doit être avant l\'heure de fin.' });
-  }
-
-  if (!SHIFT_TYPES.includes(type)) {
-    return res.status(400).json({ message: 'Type de créneau invalide.' });
-  }
 
   const client = await db.connect();
   try {

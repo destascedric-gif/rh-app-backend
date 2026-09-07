@@ -119,10 +119,6 @@ const generatePayslip = async (req, res) => {
   const { companyId } = req.user;
   const { userId, month, year } = req.body;
 
-  if (!userId || !month || !year) {
-    return res.status(400).json({ message: 'userId, month et year sont requis.' });
-  }
-
   try {
     // Récupère l'employé avec son salaire
     const empResult = await db.query(
@@ -331,10 +327,6 @@ const deletePayslip = async (req, res) => {
 const generateAllPayslips = async (req, res) => {
   const { companyId } = req.user;
   const { month, year } = req.body;
-
-  if (!month || !year) {
-    return res.status(400).json({ message: 'month et year sont requis.' });
-  }
 
   try {
     const employees = await db.query(

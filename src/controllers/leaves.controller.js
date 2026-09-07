@@ -117,18 +117,6 @@ const submitRequest = async (req, res) => {
   const { id: userId, companyId } = req.user;
   const { leaveType, startDate, endDate, reason } = req.body;
 
-  if (!leaveType || !startDate || !endDate) {
-    return res.status(400).json({ message: 'Type, date de début et de fin requis.' });
-  }
-
-  if (!LEAVE_TYPES.includes(leaveType)) {
-    return res.status(400).json({ message: 'Type de congé invalide.' });
-  }
-
-  if (new Date(startDate) > new Date(endDate)) {
-    return res.status(400).json({ message: 'La date de début doit être avant la date de fin.' });
-  }
-
   try {
     const workingDays = countWorkingDays(startDate, endDate);
 
@@ -277,10 +265,6 @@ const reviewRequest = async (req, res) => {
   const { companyId, id: adminId } = req.user;
   const { id } = req.params;
   const { status, adminNote } = req.body;
-
-  if (!['approuvé', 'refusé'].includes(status)) {
-    return res.status(400).json({ message: 'Statut invalide. Valeurs : approuvé, refusé.' });
-  }
 
   try {
     // Récupère la demande

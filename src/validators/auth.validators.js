@@ -1,32 +1,21 @@
 const { z } = require('zod');
+const { requiredString, optionalText, email } = require('./common');
 
-// z.string({ error }) couvre le champ absent/mauvais type ; .min(1, error)
-// couvre la chaîne vide — même message français dans les deux cas plutôt
-// que le message générique de zod ("expected string, received undefined").
-const required = (label) => {
-  const message = `${label} est obligatoire.`;
-  return z.string({ error: message }).trim().min(1, message);
-};
-const optionalText = () => z.string().trim().optional().or(z.literal(''));
-const email = () => {
-  const message = 'Email invalide.';
-  return z.string({ error: message }).trim().toLowerCase().email(message);
-};
 const password = (label = 'Le mot de passe') => {
   const message = `${label} doit faire au moins 8 caractères.`;
   return z.string({ error: message }).min(8, message);
 };
 
 const setupAdminSchema = z.object({
-  firstName: required('Le prénom'),
-  lastName:  required('Le nom'),
+  firstName: requiredString('Le prénom'),
+  lastName:  requiredString('Le nom'),
   email:     email(),
   password:  password(),
   phone:     optionalText(),
 });
 
 const setupCompanySchema = z.object({
-  name:       required('Le nom de l\'entreprise'),
+  name:       requiredString('Le nom de l\'entreprise'),
   siret:      optionalText(),
   address:    optionalText(),
   city:       optionalText(),
@@ -36,12 +25,12 @@ const setupCompanySchema = z.object({
 
 const loginSchema = z.object({
   email:    email(),
-  password: required('Le mot de passe'),
+  password: requiredString('Le mot de passe'),
 });
 
 const inviteEmployeeSchema = z.object({
-  firstName:   required('Le prénom'),
-  lastName:    required('Le nom'),
+  firstName:   requiredString('Le prénom'),
+  lastName:    requiredString('Le nom'),
   email:       email(),
   jobTitle:    optionalText(),
   hireDate:    optionalText(),
@@ -51,12 +40,12 @@ const inviteEmployeeSchema = z.object({
 });
 
 const acceptInviteSchema = z.object({
-  token:    required('Le token'),
+  token:    requiredString('Le token'),
   password: password(),
 });
 
 const changePasswordSchema = z.object({
-  currentPassword: required('Le mot de passe actuel'),
+  currentPassword: requiredString('Le mot de passe actuel'),
   newPassword:     password('Le nouveau mot de passe'),
 });
 

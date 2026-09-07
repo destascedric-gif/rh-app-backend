@@ -240,10 +240,6 @@ const addDocument = async (req, res) => {
   const { id } = req.params;
   const { name, type, fileUrl, fileSize } = req.body;
 
-  if (!name || !type || !fileUrl) {
-    return res.status(400).json({ message: 'Nom, type et fichier requis.' });
-  }
-
   try {
     const result = await db.query(
       `INSERT INTO documents (user_id, company_id, name, type, file_url, file_size, uploaded_by)
@@ -329,8 +325,6 @@ const addTimesheet = async (req, res) => {
   const { id } = req.params;
   const { date, clockIn, clockOut, breakMinutes, note } = req.body;
 
-  if (!date) return res.status(400).json({ message: 'La date est requise.' });
-
   try {
     const row = await upsertTimesheet({ userId: id, companyId, date, clockIn, clockOut, breakMinutes, note, status: 'validé' });
     res.status(201).json(row);
@@ -367,10 +361,6 @@ const reviewTimesheet = async (req, res) => {
   const { companyId } = req.user;
   const { id, timesheetId } = req.params;
   const { status } = req.body;
-
-  if (!['validé', 'refusé'].includes(status)) {
-    return res.status(400).json({ message: "Statut invalide. Valeurs : validé, refusé." });
-  }
 
   try {
     const result = await db.query(
@@ -425,8 +415,6 @@ const getMyTimesheets = async (req, res) => {
 const addMyTimesheet = async (req, res) => {
   const { id: userId, companyId } = req.user;
   const { date, clockIn, clockOut, breakMinutes, note } = req.body;
-
-  if (!date) return res.status(400).json({ message: 'La date est requise.' });
 
   try {
     const row = await upsertTimesheet({ userId, companyId, date, clockIn, clockOut, breakMinutes, note, status: 'en_attente' });
