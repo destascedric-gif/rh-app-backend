@@ -65,6 +65,7 @@ const wipeCompany = async (companyId) => {
   await db.query('DELETE FROM documents WHERE company_id = $1', [companyId]);
   await db.query('DELETE FROM leave_requests WHERE company_id = $1', [companyId]);
   await db.query('DELETE FROM shifts WHERE company_id = $1', [companyId]);
+  await db.query('DELETE FROM meetings WHERE company_id = $1', [companyId]);
   await db.query('DELETE FROM payslips WHERE company_id = $1', [companyId]);
   await db.query("DELETE FROM users WHERE company_id = $1 AND role = 'employee'", [companyId]);
   await db.query('DELETE FROM shift_templates WHERE company_id = $1', [companyId]);
@@ -189,6 +190,25 @@ const main = async () => {
         );
       }
     }
+  }
+
+  // ── Réunions (affichées sous le créneau des participants) ──
+  const meetings = [
+    { title: 'Réunion d\'équipe', date: addDays(thisMonday, 1), start: '14:00', end: '15:00',
+      who: ['Sarah', 'Julie', 'Mehdi', 'Camille'], note: 'Point sur la semaine et les promotions' },
+    { title: 'Point commandes', date: addDays(thisMonday, 10), start: '13:30', end: '14:00',
+      who: ['Julie', 'Camille'] },
+  ];
+  for (const m of meetings) {
+    const meetingId = (await db.query(
+      `INSERT INTO meetings (company_id, title, date, start_time, end_time, note, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [companyId, m.title, iso(m.date), m.start, m.end, m.note ?? null, adminId]
+    )).rows[0].id;
+    await db.query(
+      'INSERT INTO meeting_participants (meeting_id, user_id) SELECT $1, unnest($2::uuid[])',
+      [meetingId, m.who.map((w) => ids[w])]
+    );
   }
 
   // ── Demandes de congé ──────────────────────────────────
