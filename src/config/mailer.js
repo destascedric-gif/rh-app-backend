@@ -7,7 +7,16 @@ const FROM_NAME  = process.env.SMTP_FROM_NAME || 'RH App';
 // certains hébergeurs (Railway notamment) bloquent silencieusement les ports
 // SMTP sortants (587 et 465), ce qui fait planter/pendre l'envoi indéfiniment
 // sans jamais lever d'erreur exploitable.
+// Adresses du compte de démonstration (scripts/demo-seed.js) : elles
+// n'existent pas, aucun e-mail ne doit partir vers elles.
+const DEMO_EMAIL_DOMAIN = '@demo.myorgaly.fr';
+
 const sendMail = async ({ to, subject, html }) => {
+  if (String(to).toLowerCase().endsWith(DEMO_EMAIL_DOMAIN)) {
+    console.log(`E-mail non envoyé (compte de démonstration) : ${subject}`);
+    return { skipped: true };
+  }
+
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
@@ -31,4 +40,4 @@ const sendMail = async ({ to, subject, html }) => {
   return res.json();
 };
 
-module.exports = { sendMail, FRONTEND_URL };
+module.exports = { sendMail, FRONTEND_URL, DEMO_EMAIL_DOMAIN };
