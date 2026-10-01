@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { requiredString, optionalText, optionalEnum, optionalEmail, optionalTime, numberLike } = require('./common');
+const { requiredString, optionalText, optionalEnum, optionalEmail, optionalTime, numberLike, optionalDate, optionalNumber } = require('./common');
 
 const CONTRACT_TYPES = ['CDI', 'CDD', 'Alternance', 'Stage', 'Freelance'];
 const WORK_TIMES = ['Temps plein', 'Temps partiel'];
@@ -16,10 +16,10 @@ const updateEmployeeSchema = z.object({
   department:   optionalText(),
   contractType: optionalEnum(CONTRACT_TYPES, 'Le type de contrat'),
   workTime:     optionalEnum(WORK_TIMES, 'Le temps de travail'),
-  weeklyHours:  numberLike(),
-  hireDate:     optionalText(),
-  grossSalary:  numberLike(),
-  birthDate:    optionalText(),
+  weeklyHours:  optionalNumber('Les heures hebdomadaires'),
+  hireDate:     optionalDate('La date d\'embauche'),
+  grossSalary:  optionalNumber('Le salaire brut'),
+  birthDate:    optionalDate('La date de naissance'),
 });
 
 const addDocumentSchema = z.object({

@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { requiredString, optionalText, email } = require('./common');
+const { requiredString, optionalText, email, optionalDate, optionalNumber } = require('./common');
 
 const password = (label = 'Le mot de passe') => {
   const message = `${label} doit faire au moins 8 caractères.`;
@@ -36,10 +36,10 @@ const inviteEmployeeSchema = z.object({
   lastName:    requiredString('Le nom'),
   email:       email(),
   jobTitle:    optionalText(),
-  hireDate:    optionalText(),
-  grossSalary: z.union([z.number(), z.string()]).optional(),
+  hireDate:    optionalDate('La date d\'embauche'),
+  grossSalary: optionalNumber('Le salaire brut'),
   workTime:    optionalText(),
-  weeklyHours: z.union([z.number(), z.string()]).optional(),
+  weeklyHours: optionalNumber('Les heures hebdomadaires'),
 });
 
 const acceptInviteSchema = z.object({

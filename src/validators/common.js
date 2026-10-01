@@ -62,6 +62,25 @@ const optionalTime = (label) => {
 
 // Les champs numériques arrivent parfois en string depuis un <input> HTML.
 const numberLike = () => z.union([z.number(), z.string()]).optional();
+
+// Un <input type="date"> ou "number" laissé vide envoie '' : PostgreSQL le
+// refuse pour une colonne DATE ou NUMERIC (erreur 500). Le vide devient donc
+// undefined (champ ignoré), et une valeur saisie est vérifiée avant la requête.
+const optionalDate = (label) => {
+  const message = `${label} doit être une date valide.`;
+  return z.preprocess(
+    (val) => (val === '' || val === null ? undefined : val),
+    z.string({ error: message }).regex(/^\d{4}-\d{2}-\d{2}$/, message).optional()
+  );
+};
+
+const optionalNumber = (label) => {
+  const message = `${label} doit être un nombre positif.`;
+  return z.preprocess(
+    (val) => (val === '' || val === null ? undefined : val),
+    z.coerce.number({ error: message }).nonnegative(message).optional()
+  );
+};
 const requiredNumberLike = (label) => z.union([z.number(), z.string()], { error: `${label} est obligatoire.` });
 
-module.exports = { requiredString, optionalText, optionalEnum, email, optionalEmail, timeString, optionalTime, numberLike, requiredNumberLike };
+module.exports = { requiredString, optionalText, optionalEnum, email, optionalEmail, timeString, optionalTime, numberLike, requiredNumberLike, optionalDate, optionalNumber };
