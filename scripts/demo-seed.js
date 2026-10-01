@@ -19,6 +19,7 @@ const db     = require('../src/config/db');
 const { DEMO_EMAIL_DOMAIN } = require('../src/config/mailer');
 const { toLocalDateString } = require('../src/utils/date');
 const { recomputeUsedLeave } = require('../src/services/leaveBalance.service');
+const { DEFAULT_LEAVE_ACCRUAL } = require('../src/services/leaves.service');
 
 const ADMIN_EMAIL = `gerant${DEMO_EMAIL_DOMAIN}`;
 const EMPLOYEE_EMAIL = `sarah${DEMO_EMAIL_DOMAIN}`;
@@ -84,8 +85,12 @@ const main = async () => {
     await wipeCompany(companyId);
     await db.query(
       `UPDATE company SET name = $1, address = $2, postal_code = $3, city = $4, sector = $5,
-              plan = 'pro', primary_color = DEFAULT WHERE id = $6`,
-      [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector, companyId]
+              plan = 'pro', primary_color = DEFAULT,
+              default_weekly_hours = DEFAULT, leave_accrual_per_month = $7,
+              overtime_tier1_rate = DEFAULT, overtime_tier2_rate = DEFAULT,
+              overtime_tier2_threshold_hours = DEFAULT
+       WHERE id = $6`,
+      [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector, companyId, DEFAULT_LEAVE_ACCRUAL]
     );
     console.log('Compte de démonstration existant : données remises à neuf.');
   } else {
@@ -94,9 +99,9 @@ const main = async () => {
     // Plan Pro : la démo compte plus de 5 employés, et l'ajout d'un employé
     // doit rester possible pendant une présentation.
     companyId = (await db.query(
-      `INSERT INTO company (name, address, postal_code, city, sector, plan)
-       VALUES ($1, $2, $3, $4, $5, 'pro') RETURNING id`,
-      [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector]
+      `INSERT INTO company (name, address, postal_code, city, sector, plan, leave_accrual_per_month)
+       VALUES ($1, $2, $3, $4, $5, 'pro', $6) RETURNING id`,
+      [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector, DEFAULT_LEAVE_ACCRUAL]
     )).rows[0].id;
     adminId = (await db.query(
       `INSERT INTO users (company_id, first_name, last_name, email, password_hash, role, invite_accepted,

@@ -1,8 +1,13 @@
 // ─────────────────────────────────────────────
 // SERVICE CONGÉS — Calculs métier
 // Règle légale française : 2,5 jours ouvrables
-// acquis par mois de travail effectif
+// acquis par mois de travail effectif, soit
+// 2,08 jours ouvrés (Orgaly décompte en jours
+// ouvrés : lundi → vendredi, hors fériés)
 // ─────────────────────────────────────────────
+
+// Jours ouvrés de congés payés acquis par mois (minimum légal)
+const DEFAULT_LEAVE_ACCRUAL = 2.08;
 
 // Jours fériés français fixes + Pâques (approximatif)
 const getFrenchHolidays = (year) => {
@@ -83,13 +88,14 @@ const countWorkingDays = (startDate, endDate) => {
 
 /**
  * Calcule le solde de congés payés acquis selon la règle légale française :
- * 2,5 jours ouvrables par mois de travail effectif = 30 jours/an par défaut
- * (personnalisable via les paramètres de l'entreprise)
+ * 5 semaines par an, soit 2,08 jours ouvrés par mois de travail effectif
+ * = 25 jours ouvrés/an par défaut (personnalisable via les paramètres de
+ * l'entreprise, jamais en dessous de ce minimum)
  * @param {Date} hireDate         — date d'embauche
  * @param {number} year           — année de référence (période juin N-1 → mai N)
- * @param {number} [accrualPerMonth=2.5] — jours acquis par mois travaillé
+ * @param {number} [accrualPerMonth=2.08] — jours ouvrés acquis par mois travaillé
  */
-const computeLegalBalance = (hireDate, year, accrualPerMonth = 2.5) => {
+const computeLegalBalance = (hireDate, year, accrualPerMonth = DEFAULT_LEAVE_ACCRUAL) => {
   const hire = new Date(hireDate);
 
   // Période de référence légale : 1er juin N-1 → 31 mai N
@@ -114,4 +120,4 @@ const computeLegalBalance = (hireDate, year, accrualPerMonth = 2.5) => {
   return Math.min(months * accrualPerMonth, accrualPerMonth * 12);
 };
 
-module.exports = { countWorkingDays, computeLegalBalance, getFrenchHolidays };
+module.exports = { countWorkingDays, computeLegalBalance, getFrenchHolidays, DEFAULT_LEAVE_ACCRUAL };

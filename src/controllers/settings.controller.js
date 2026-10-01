@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { recomputeAccruedLeave } = require('../services/leaveBalance.service');
 
 // GET /api/settings
 const getSettings = async (req, res) => {
@@ -34,6 +35,8 @@ const updateSettings = async (req, res) => {
   } = req.body;
 
   try {
+    const before = await db.query('SELECT leave_accrual_per_month FROM company WHERE id = $1', [companyId]);
+
     const result = await db.query(
       `UPDATE company SET
          default_weekly_hours           = COALESCE($1, default_weekly_hours),
@@ -52,6 +55,12 @@ const updateSettings = async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Entreprise introuvable.' });
+    }
+
+    // Nouveau rythme d'acquisition : les soldes déjà calculés suivent
+    const accrual = result.rows[0].leave_accrual_per_month;
+    if (Number(accrual) !== Number(before.rows[0]?.leave_accrual_per_month)) {
+      await recomputeAccruedLeave(companyId, accrual);
     }
 
     res.json({ message: 'Paramètres mis à jour.', settings: result.rows[0] });

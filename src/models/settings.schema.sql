@@ -14,7 +14,7 @@ ALTER TABLE shifts
 -- Politique RH et personnalisation, au niveau de l'entreprise
 ALTER TABLE company
   ADD COLUMN IF NOT EXISTS default_weekly_hours          NUMERIC(4,2) DEFAULT 35,
-  ADD COLUMN IF NOT EXISTS leave_accrual_per_month        NUMERIC(4,2) DEFAULT 2.5,
+  ADD COLUMN IF NOT EXISTS leave_accrual_per_month        NUMERIC(4,2) DEFAULT 2.08,
   ADD COLUMN IF NOT EXISTS overtime_tier1_rate            NUMERIC(3,2) DEFAULT 1.25,
   ADD COLUMN IF NOT EXISTS overtime_tier2_rate            NUMERIC(3,2) DEFAULT 1.50,
   ADD COLUMN IF NOT EXISTS overtime_tier2_threshold_hours NUMERIC(4,2) DEFAULT 43,

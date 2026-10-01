@@ -1,5 +1,5 @@
 const db = require('../config/db');
-const { computeLegalBalance, getFrenchHolidays } = require('./leaves.service');
+const { computeLegalBalance, getFrenchHolidays, DEFAULT_LEAVE_ACCRUAL } = require('./leaves.service');
 const { toLocalDateString } = require('../utils/date');
 
 // Calcule (et persiste au passage) le solde de Congés payés d'un employé
@@ -23,7 +23,7 @@ const getOrComputeCPBalance = async (userId, companyId, year) => {
   if (!hireDate) return { balance_days: 0, used_days: 0 };
 
   const companyResult = await db.query('SELECT leave_accrual_per_month FROM company WHERE id = $1', [companyId]);
-  const accrualPerMonth = companyResult.rows[0]?.leave_accrual_per_month ?? 2.5;
+  const accrualPerMonth = companyResult.rows[0]?.leave_accrual_per_month ?? DEFAULT_LEAVE_ACCRUAL;
   const legalDays = computeLegalBalance(hireDate, year, accrualPerMonth);
 
   await db.query(
@@ -91,6 +91,27 @@ const recomputeUsedLeave = async (userId, companyId, year) => {
   );
 };
 
+// Recalcule les congés payés acquis de tous les employés d'une entreprise
+// après un changement du nombre de jours acquis par mois : le solde n'est
+// sinon calculé qu'une fois, à la première consultation de l'année.
+const recomputeAccruedLeave = async (companyId, accrualPerMonth) => {
+  const rows = await db.query(
+    `SELECT b.user_id, b.year, u.hire_date
+     FROM leave_balances b
+     JOIN users u ON u.id = b.user_id
+     WHERE b.company_id = $1 AND b.leave_type = 'Congés payés'`,
+    [companyId]
+  );
+  for (const row of rows.rows) {
+    const days = row.hire_date ? computeLegalBalance(row.hire_date, row.year, Number(accrualPerMonth)) : 0;
+    await db.query(
+      `UPDATE leave_balances SET balance_days = $1, updated_at = NOW()
+       WHERE user_id = $2 AND company_id = $3 AND leave_type = 'Congés payés' AND year = $4`,
+      [days, row.user_id, companyId, row.year]
+    );
+  }
+};
+
 // Années civiles couvertes par une période (une demande de fin décembre à
 // début janvier touche deux soldes annuels).
 const yearsBetween = (start, end) => {
@@ -101,4 +122,4 @@ const yearsBetween = (start, end) => {
   return years;
 };
 
-module.exports = { getOrComputeCPBalance, recomputeUsedLeave, yearsBetween };
+module.exports = { getOrComputeCPBalance, recomputeUsedLeave, recomputeAccruedLeave, yearsBetween };

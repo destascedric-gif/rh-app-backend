@@ -5,6 +5,7 @@ const db       = require('../config/db');
 const { sendMail, FRONTEND_URL } = require('../config/mailer');
 const { CGU_VERSION } = require('../config/legal');
 const { checkEmployeeLimit, syncSubscriptionQuantity } = require('../services/billing.service');
+const { DEFAULT_LEAVE_ACCRUAL } = require('../services/leaves.service');
 
 // ─────────────────────────────────────────────
 // UTILITAIRES
@@ -94,10 +95,10 @@ const setupCompany = async (req, res) => {
   try {
     // Création de l'entreprise
     const companyResult = await db.query(
-      `INSERT INTO company (name, siret, address, city, postal_code, sector)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO company (name, siret, address, city, postal_code, sector, leave_accrual_per_month)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [name, cleanSiret, address, city, postalCode, sector]
+      [name, cleanSiret, address, city, postalCode, sector, DEFAULT_LEAVE_ACCRUAL]
     );
 
     const companyId = companyResult.rows[0].id;
