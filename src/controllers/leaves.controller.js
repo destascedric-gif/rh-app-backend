@@ -1,5 +1,6 @@
 const db          = require('../config/db');
-const { countWorkingDays, computeLegalBalance } = require('../services/leaves.service');
+const { countWorkingDays } = require('../services/leaves.service');
+const { getOrComputeCPBalance, recomputeUsedLeave, yearsBetween } = require('../services/leaveBalance.service');
 const { sendLeaveApproved, sendLeaveRefused, sendLeaveRequestToAdmin } = require('../services/mail.service');
 const { toLocalDateString } = require('../utils/date');
 
@@ -11,44 +12,26 @@ const LEAVE_TYPES = [
   'Congé maternité / paternité',
 ];
 
+const formatDate = (d) => new Date(d).toLocaleDateString('fr-FR');
+
+// Demande du même employé dont la période chevauche [startDate, endDate]
+// (bornes incluses), parmi les statuts donnés. excludeId : la demande en
+// cours d'examen elle-même.
+const findOverlappingRequest = async (userId, startDate, endDate, statuses, excludeId = null) => {
+  const result = await db.query(
+    `SELECT id, status, start_date, end_date FROM leave_requests
+     WHERE user_id = $1 AND status::text = ANY($2::text[])
+       AND start_date <= $4 AND end_date >= $3
+       AND ($5::uuid IS NULL OR id <> $5::uuid)
+     ORDER BY start_date LIMIT 1`,
+    [userId, statuses, startDate, endDate, excludeId]
+  );
+  return result.rows[0] ?? null;
+};
+
 // ─────────────────────────────────────────────
 // SOLDES — EMPLOYÉ
 // ─────────────────────────────────────────────
-
-// Calcule (et persiste au passage) le solde de Congés payés d'un employé
-// pour une année de référence donnée — y compris une année future pas
-// encore "vécue", pour ne pas pénaliser une demande anticipée.
-const getOrComputeCPBalance = async (userId, companyId, year) => {
-  const existing = await db.query(
-    `SELECT balance_days, used_days FROM leave_balances
-     WHERE user_id = $1 AND company_id = $2 AND leave_type = 'Congés payés' AND year = $3`,
-    [userId, companyId, year]
-  );
-  if (existing.rows[0]) {
-    return {
-      balance_days: parseFloat(existing.rows[0].balance_days),
-      used_days:    parseFloat(existing.rows[0].used_days),
-    };
-  }
-
-  const userResult = await db.query('SELECT hire_date FROM users WHERE id = $1', [userId]);
-  const hireDate = userResult.rows[0]?.hire_date;
-  if (!hireDate) return { balance_days: 0, used_days: 0 };
-
-  const companyResult = await db.query('SELECT leave_accrual_per_month FROM company WHERE id = $1', [companyId]);
-  const accrualPerMonth = companyResult.rows[0]?.leave_accrual_per_month ?? 2.5;
-  const legalDays = computeLegalBalance(hireDate, year, accrualPerMonth);
-
-  await db.query(
-    `INSERT INTO leave_balances (user_id, company_id, leave_type, balance_days, year)
-     VALUES ($1, $2, 'Congés payés', $3, $4)
-     ON CONFLICT (user_id, leave_type, year)
-     DO UPDATE SET balance_days = $3, updated_at = NOW()`,
-    [userId, companyId, legalDays, year]
-  );
-
-  return { balance_days: legalDays, used_days: 0 };
-};
 
 // GET /api/leaves/balance
 // Retourne les soldes de l'employé connecté pour l'année en cours
@@ -122,6 +105,15 @@ const submitRequest = async (req, res) => {
 
     if (workingDays === 0) {
       return res.status(400).json({ message: 'La période sélectionnée ne contient aucun jour ouvré.' });
+    }
+
+    // Une même journée ne peut faire l'objet que d'une seule demande active
+    const overlap = await findOverlappingRequest(userId, startDate, endDate, ['en_attente', 'approuvé']);
+    if (overlap) {
+      return res.status(409).json({
+        message: `Vous avez déjà une demande ${overlap.status === 'approuvé' ? 'approuvée' : 'en attente'} `
+          + `qui couvre une partie de ces dates (du ${formatDate(overlap.start_date)} au ${formatDate(overlap.end_date)}).`,
+      });
     }
 
     // Calcule le solde réellement acquis pour l'année concernée par la demande
@@ -285,6 +277,20 @@ const reviewRequest = async (req, res) => {
       return res.status(400).json({ message: 'Cette demande a déjà été traitée.' });
     }
 
+    // Deux congés approuvés ne peuvent pas couvrir les mêmes jours
+    if (status === 'approuvé') {
+      const overlap = await findOverlappingRequest(
+        request.employee_id, request.start_date, request.end_date, ['approuvé'], request.id
+      );
+      if (overlap) {
+        return res.status(409).json({
+          message: `Ces dates chevauchent un congé déjà approuvé pour cet employé `
+            + `(du ${formatDate(overlap.start_date)} au ${formatDate(overlap.end_date)}). `
+            + 'Refusez cette demande ou ajustez le planning.',
+        });
+      }
+    }
+
     // Met à jour le statut
     await db.query(
       `UPDATE leave_requests
@@ -293,23 +299,6 @@ const reviewRequest = async (req, res) => {
        WHERE id = $4`,
       [status, adminNote, adminId, id]
     );
-
-    // Si approuvé : débite le solde
-    if (status === 'approuvé' && request.leave_type === 'Congés payés') {
-      const year = new Date(request.start_date).getFullYear();
-      // S'assure que la ligne de solde existe avant de la débiter — sinon,
-      // pour le tout premier congé d'un employé (aucune ligne créée pour
-      // l'instant), l'UPDATE ci-dessous ne trouve aucune ligne et ne fait
-      // rien silencieusement : le jour débité est perdu dès que le solde
-      // est ensuite calculé "à la volée" avec used_days remis à 0.
-      await getOrComputeCPBalance(request.employee_id, companyId, year);
-      await db.query(
-        `UPDATE leave_balances
-         SET used_days = used_days + $1, updated_at = NOW()
-         WHERE user_id = $2 AND leave_type = 'Congés payés' AND year = $3`,
-        [request.working_days, request.employee_id, year]
-      );
-    }
 
     // Si approuvé : intègre automatiquement le congé dans le planning, jour
     // par jour, en créneaux de type "congé" (ou "absence" pour maladie /
@@ -334,6 +323,12 @@ const reviewRequest = async (req, res) => {
              start_time = '00:00', end_time = '23:59', note = $4, type = $5, updated_at = NOW()`,
           [request.employee_id, companyId, date, request.leave_type, shiftType, adminId]
         );
+      }
+
+      // Le solde est déduit du planning qu'on vient d'écrire (voir
+      // recomputeUsedLeave) : chaque jour n'est compté qu'une fois.
+      for (const year of yearsBetween(request.start_date, request.end_date)) {
+        await recomputeUsedLeave(request.employee_id, companyId, year);
       }
     }
 

@@ -1,9 +1,24 @@
 const db = require('../config/db');
 const { toLocalDateString } = require('../utils/date');
+const { recomputeUsedLeave } = require('../services/leaveBalance.service');
 
 // ─────────────────────────────────────────────
 // UTILITAIRES
 // ─────────────────────────────────────────────
+
+// Le solde de congés est déduit du planning : toute modification d'un jour
+// (ajout, remplacement, suppression d'un congé) le recalcule. Un échec ici
+// ne doit pas annuler la modification du planning déjà enregistrée.
+const refreshLeaveBalance = async (userId, companyId, date) => {
+  try {
+    const year = typeof date === 'string'
+      ? Number(date.slice(0, 4))
+      : date.getFullYear();
+    await recomputeUsedLeave(userId, companyId, year);
+  } catch (err) {
+    console.error('Recalcul du solde de congés :', err);
+  }
+};
 
 // Calcule la durée nette travaillée (heures totales - pauses) en minutes
 const computeNetMinutes = (startTime, endTime, breaks = []) => {
@@ -166,6 +181,7 @@ const createShift = async (req, res) => {
     }
 
     await client.query('COMMIT');
+    await refreshLeaveBalance(userId, companyId, shift.date);
 
     // Retourne le créneau enrichi
     const [enriched] = await enrichShifts([shift]);
@@ -217,6 +233,7 @@ const updateShift = async (req, res) => {
     }
 
     await client.query('COMMIT');
+    await refreshLeaveBalance(result.rows[0].user_id, companyId, result.rows[0].date);
 
     const [enriched] = await enrichShifts([result.rows[0]]);
     res.json(enriched);
@@ -240,13 +257,14 @@ const deleteShift = async (req, res) => {
 
   try {
     const result = await db.query(
-      'DELETE FROM shifts WHERE id = $1 AND company_id = $2 RETURNING id',
+      'DELETE FROM shifts WHERE id = $1 AND company_id = $2 RETURNING id, user_id, date',
       [id, companyId]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Créneau introuvable.' });
     }
+    await refreshLeaveBalance(result.rows[0].user_id, companyId, result.rows[0].date);
 
     res.json({ message: 'Créneau supprimé.' });
   } catch (err) {
