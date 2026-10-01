@@ -18,6 +18,7 @@ router.patch('/notifications/read-all', ctrl.markAllRead);     // Marquer tout l
 // ── Admin ─────────────────────────────────────────────
 router.get  ('/admin/requests',          isAdmin, ctrl.getAllRequests);      // Toutes les demandes
 router.patch('/admin/requests/:id',      isAdmin, validate(reviewRequestSchema), ctrl.reviewRequest);       // Approuver / refuser
+router.get  ('/admin/balances',          isAdmin, ctrl.getAllBalances);      // Soldes CP de toute l'équipe
 router.get  ('/admin/balances/:userId',  isAdmin, ctrl.getEmployeeBalance);  // Solde d'un employé
 
 module.exports = router;

@@ -375,6 +375,38 @@ const reviewRequest = async (req, res) => {
   }
 };
 
+// GET /api/leaves/admin/balances — Solde de congés payés de chaque employé
+// actif (vue admin), calculé au besoin pour ceux qui n'en ont pas encore.
+const getAllBalances = async (req, res) => {
+  const { companyId } = req.user;
+  const year = new Date().getFullYear();
+
+  try {
+    const employees = await db.query(
+      `SELECT id, first_name, last_name, hire_date FROM users
+       WHERE company_id = $1 AND role = 'employee' AND is_active = TRUE
+       ORDER BY first_name, last_name`,
+      [companyId]
+    );
+
+    const balances = [];
+    for (const emp of employees.rows) {
+      const { balance_days, used_days } = await getOrComputeCPBalance(emp.id, companyId, year);
+      balances.push({
+        employee_id:   emp.id,
+        employee_name: `${emp.first_name} ${emp.last_name}`,
+        has_hire_date: Boolean(emp.hire_date),
+        balance_days,
+        used_days,
+      });
+    }
+    res.json({ year, balances });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
 // GET /api/leaves/admin/balances/:userId — Solde d'un employé (vue admin)
 const getEmployeeBalance = async (req, res) => {
   const { companyId } = req.user;
@@ -397,5 +429,5 @@ const getEmployeeBalance = async (req, res) => {
 module.exports = {
   getMyBalance, getMyRequests, submitRequest,
   getNotifications, markAllRead,
-  getAllRequests, reviewRequest, getEmployeeBalance,
+  getAllRequests, reviewRequest, getEmployeeBalance, getAllBalances,
 };
