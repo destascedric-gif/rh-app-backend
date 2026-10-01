@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { toLocalDateString } = require('../utils/date');
+const { checkEmployeeLimit, syncSubscriptionQuantity } = require('../services/billing.service');
 
 // GET /api/employees/timesheets/pending — tous les pointages en attente de
 // validation de l'entreprise (pour le tableau de bord admin)
@@ -151,6 +152,7 @@ const deactivateEmployee = async (req, res) => {
        WHERE id = $1 AND company_id = $2`,
       [id, companyId]
     );
+    await syncSubscriptionQuantity(companyId);
     res.json({ message: 'Employé désactivé.' });
   } catch (err) {
     console.error(err);
@@ -168,6 +170,11 @@ const reactivateEmployee = async (req, res) => {
   const { id } = req.params;
 
   try {
+    const limitError = await checkEmployeeLimit(companyId);
+    if (limitError) {
+      return res.status(403).json({ message: limitError, code: 'PLAN_LIMIT' });
+    }
+
     const result = await db.query(
       `UPDATE users SET is_active = TRUE, updated_at = NOW()
        WHERE id = $1 AND company_id = $2
@@ -177,6 +184,7 @@ const reactivateEmployee = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Employé introuvable.' });
     }
+    await syncSubscriptionQuantity(companyId);
     res.json({ message: 'Employé réactivé.' });
   } catch (err) {
     console.error(err);

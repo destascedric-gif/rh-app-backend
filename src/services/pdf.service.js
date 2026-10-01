@@ -38,6 +38,8 @@ const generatePayslipPDF = ({
     const MUTED   = '#6b6b68';
     const BLUE    = '#185FA5';
     const BORDER  = '#d3d1c7';
+    const WARN    = '#9A5B12';
+    const WARN_BG = '#FCF1DE';
 
     // ── EN-TÊTE ENTREPRISE ───────────────────────────────
     doc.rect(45, 45, W, 70).fill(BLUE);
@@ -54,7 +56,8 @@ const generatePayslipPDF = ({
        .text('BULLETIN DE PAIE', 350, 68, { width: 190, align: 'right' });
 
     doc.font('Helvetica').fontSize(9).fillColor('#cce0f5')
-       .text(`Période : ${MONTHS[payslip.period_month - 1]} ${payslip.period_year}`, 350, 85, { width: 190, align: 'right' });
+       .text(`Période : ${MONTHS[payslip.period_month - 1]} ${payslip.period_year}`, 350, 85, { width: 190, align: 'right' })
+       .text('Document indicatif — non certifié', 350, 97, { width: 190, align: 'right' });
 
     // ── INFORMATIONS EMPLOYÉ ─────────────────────────────
     let y = 130;
@@ -206,6 +209,26 @@ const generatePayslipPDF = ({
       }
       y += 48;
     }
+
+    // ── AVERTISSEMENT : PAIE NON CERTIFIÉE ───────────────
+    // Le document s'intitule "Bulletin de paie" : sans cette mention, un
+    // client pourrait croire qu'il remplace une paie déclarative (DSN).
+    y += 4;
+    const warningText =
+      'Document établi à titre indicatif par le logiciel Orgaly, qui n\'est pas un logiciel de paie '
+      + 'certifié et n\'effectue aucune déclaration sociale (DSN). Les taux de cotisation utilisés sont '
+      + 'simplifiés et ne tiennent compte ni de la convention collective, ni des allègements, ni du '
+      + 'prélèvement à la source. L\'employeur doit faire vérifier ce bulletin par un professionnel de la '
+      + 'paie avant de le remettre au salarié ; il reste seul responsable de son exactitude.';
+    doc.font('Helvetica').fontSize(7.5);
+    const warningHeight = doc.heightOfString(warningText, { width: W - 20 }) + 24;
+    doc.rect(45, y, W, warningHeight).fill(WARN_BG);
+    doc.rect(45, y, 3, warningHeight).fill(WARN);
+    doc.fillColor(WARN).font('Helvetica-Bold').fontSize(8)
+       .text('Avertissement — paie non certifiée', 55, y + 7, { width: W - 20 });
+    doc.fillColor(DARK).font('Helvetica').fontSize(7.5)
+       .text(warningText, 55, y + 18, { width: W - 20 });
+    y += warningHeight;
 
     // ── PIED DE PAGE ─────────────────────────────────────
     y += 16;

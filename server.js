@@ -11,6 +11,8 @@ const scheduleRoutes = require('./src/routes/schedule.routes');
 const payrollRoutes  = require('./src/routes/payroll.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const shiftTemplatesRoutes = require('./src/routes/shiftTemplates.routes');
+const billingRoutes  = require('./src/routes/billing.routes');
+const billingCtrl    = require('./src/controllers/billing.controller');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -33,9 +35,15 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// Webhook Stripe : doit recevoir le corps brut (vérification de signature),
+// donc déclaré avant express.json().
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), billingCtrl.handleWebhook);
+
 app.use(express.json());
 
 app.use('/api/auth',      authRoutes);
+app.use('/api/billing',   billingRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/leaves',    leavesRoutes);
 app.use('/api/schedule',  scheduleRoutes);

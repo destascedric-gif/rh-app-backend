@@ -3,6 +3,8 @@ const jwt      = require('jsonwebtoken');
 const crypto   = require('crypto');
 const db       = require('../config/db');
 const { sendMail, FRONTEND_URL } = require('../config/mailer');
+const { CGU_VERSION } = require('../config/legal');
+const { checkEmployeeLimit, syncSubscriptionQuantity } = require('../services/billing.service');
 
 // ─────────────────────────────────────────────
 // UTILITAIRES
@@ -56,10 +58,11 @@ const setupAdmin = async (req, res) => {
 
     // Création de l'admin (sans company_id pour l'instant)
     const result = await db.query(
-      `INSERT INTO users (first_name, last_name, email, password_hash, role, phone, invite_accepted)
-       VALUES ($1, $2, $3, $4, 'admin', $5, TRUE)
+      `INSERT INTO users (first_name, last_name, email, password_hash, role, phone, invite_accepted,
+                          cgu_accepted_at, cgu_version)
+       VALUES ($1, $2, $3, $4, 'admin', $5, TRUE, NOW(), $6)
        RETURNING id, email, role`,
-      [firstName, lastName, email, passwordHash, phone]
+      [firstName, lastName, email, passwordHash, phone, CGU_VERSION]
     );
 
     const admin = result.rows[0];
@@ -193,6 +196,11 @@ const inviteEmployee = async (req, res) => {
       return res.status(409).json({ message: 'Cet email est déjà utilisé.' });
     }
 
+    const limitError = await checkEmployeeLimit(companyId);
+    if (limitError) {
+      return res.status(403).json({ message: limitError, code: 'PLAN_LIMIT' });
+    }
+
     // Génère un token d'invitation unique (valable 48h)
     const inviteToken  = crypto.randomBytes(32).toString('hex');
     const inviteExpires = new Date(Date.now() + 48 * 60 * 60 * 1000);
@@ -213,6 +221,7 @@ const inviteEmployee = async (req, res) => {
       [companyId, firstName, lastName, email, jobTitle, hireDate, grossSalary,
        workTime || null, effectiveWeeklyHours, inviteToken, inviteExpires]
     );
+    await syncSubscriptionQuantity(companyId);
 
     // L'employé est créé même si l'email échoue à partir d'ici — on ne bloque
     // pas la création pour un problème SMTP, mais on remonte l'info au front.

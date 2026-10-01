@@ -12,6 +12,9 @@ const setupAdminSchema = z.object({
   email:     email(),
   password:  password(),
   phone:     optionalText(),
+  acceptCgu: z.literal(true, {
+    error: 'Vous devez accepter les CGU et la politique de confidentialité.',
+  }),
 });
 
 const setupCompanySchema = z.object({
