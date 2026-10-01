@@ -49,6 +49,21 @@ const enrichShifts = async (shifts) => {
     breaksByShift[b.shift_id].push(b);
   });
 
+  // Couleur d'un créneau de travail = celle de l'horaire type aux mêmes
+  // heures de début et de fin (null si saisi à la main : couleur neutre).
+  const companyIds = [...new Set(shifts.map((s) => s.company_id))];
+  const templates = (await db.query(
+    'SELECT company_id, start_time, end_time, color FROM shift_templates WHERE company_id = ANY($1)',
+    [companyIds]
+  )).rows;
+  const hhmm = (t) => String(t).slice(0, 5);
+  const colorOf = (s) => {
+    if ((s.type || 'travail') !== 'travail') return null;
+    const match = templates.find((t) => t.company_id === s.company_id
+      && hhmm(t.start_time) === hhmm(s.start_time) && hhmm(t.end_time) === hhmm(s.end_time));
+    return match?.color ?? null;
+  };
+
   return shifts.map((s) => {
     const breaks     = breaksByShift[s.id] ?? [];
     const netMinutes = computeNetMinutes(s.start_time, s.end_time, breaks);
@@ -56,6 +71,7 @@ const enrichShifts = async (shifts) => {
       ...s,
       date:        toLocalDateString(s.date),
       breaks,
+      color:       colorOf(s),
       net_hours:   parseFloat((netMinutes / 60).toFixed(2)),
       net_minutes: netMinutes,
     };

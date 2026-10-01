@@ -1,11 +1,15 @@
 const db = require('../config/db');
+const { pickFreeColor } = require('../services/shiftColors');
 
-// GET /api/shift-templates
+const COLUMNS = 'id, name, start_time, end_time, break_start, break_end, color';
+
+// GET /api/shift-templates — lisible par tous (les employés en ont besoin
+// pour la légende des couleurs de leur planning)
 const getShiftTemplates = async (req, res) => {
   const { companyId } = req.user;
   try {
     const result = await db.query(
-      `SELECT id, name, start_time, end_time, break_start, break_end
+      `SELECT ${COLUMNS}
        FROM shift_templates
        WHERE company_id = $1
        ORDER BY start_time`,
@@ -18,17 +22,23 @@ const getShiftTemplates = async (req, res) => {
   }
 };
 
-// POST /api/shift-templates
+// POST /api/shift-templates — couleur choisie, sinon la première libre
 const createShiftTemplate = async (req, res) => {
   const { companyId } = req.user;
-  const { name, startTime, endTime, breakStart, breakEnd } = req.body;
+  const { name, startTime, endTime, breakStart, breakEnd, color } = req.body;
 
   try {
+    let finalColor = color;
+    if (!finalColor) {
+      const used = await db.query('SELECT color FROM shift_templates WHERE company_id = $1', [companyId]);
+      finalColor = pickFreeColor(used.rows.map((r) => r.color));
+    }
+
     const result = await db.query(
-      `INSERT INTO shift_templates (company_id, name, start_time, end_time, break_start, break_end)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, start_time, end_time, break_start, break_end`,
-      [companyId, name, startTime, endTime, breakStart || null, breakEnd || null]
+      `INSERT INTO shift_templates (company_id, name, start_time, end_time, break_start, break_end, color)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING ${COLUMNS}`,
+      [companyId, name, startTime, endTime, breakStart || null, breakEnd || null, finalColor]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -37,19 +47,20 @@ const createShiftTemplate = async (req, res) => {
   }
 };
 
-// PUT /api/shift-templates/:id
+// PUT /api/shift-templates/:id — couleur inchangée si non fournie
 const updateShiftTemplate = async (req, res) => {
   const { companyId } = req.user;
   const { id } = req.params;
-  const { name, startTime, endTime, breakStart, breakEnd } = req.body;
+  const { name, startTime, endTime, breakStart, breakEnd, color } = req.body;
 
   try {
     const result = await db.query(
       `UPDATE shift_templates
-       SET name = $1, start_time = $2, end_time = $3, break_start = $4, break_end = $5
-       WHERE id = $6 AND company_id = $7
-       RETURNING id, name, start_time, end_time, break_start, break_end`,
-      [name, startTime, endTime, breakStart || null, breakEnd || null, id, companyId]
+       SET name = $1, start_time = $2, end_time = $3, break_start = $4, break_end = $5,
+           color = COALESCE($6, color)
+       WHERE id = $7 AND company_id = $8
+       RETURNING ${COLUMNS}`,
+      [name, startTime, endTime, breakStart || null, breakEnd || null, color || null, id, companyId]
     );
     if (!result.rows[0]) return res.status(404).json({ message: 'Modèle introuvable.' });
     res.json(result.rows[0]);

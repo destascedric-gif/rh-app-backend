@@ -29,11 +29,16 @@ const COMPANY = {
   address: '12 rue des Tilleuls', postal_code: '77380', city: 'Combs-la-Ville', sector: 'Pharmacie',
 };
 
-// Créneaux types de la pharmacie (ouverte du lundi au samedi, 8h30 – 20h)
+// Créneaux types de la pharmacie (ouverte du lundi au samedi, 8h30 – 20h),
+// tous avec une pause, chacun avec sa couleur (palette de shiftColors.js)
 const SLOTS = {
-  O: { start: '08:30', end: '14:00' },                                   // ouverture
-  F: { start: '14:00', end: '20:00' },                                   // fermeture
-  J: { start: '09:00', end: '18:00', brk: ['12:30', '13:30'] },          // journée
+  O: { name: 'Ouverture', start: '08:30', end: '15:00', brk: ['12:00', '12:30'], color: '#3457D5' },
+  F: { name: 'Fermeture', start: '13:30', end: '20:00', brk: ['16:30', '17:00'], color: '#B9791E' },
+  J: { name: 'Journée',   start: '09:00', end: '18:00', brk: ['12:30', '13:30'], color: '#1F7A5A' },
+};
+const breakMinutes = (slot) => {
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  return toMin(slot.brk[1]) - toMin(slot.brk[0]);
 };
 
 // Équipe : semaine type du lundi au samedi (O/F/J = créneau, R = repos),
@@ -105,11 +110,12 @@ const main = async () => {
 
   // ── Horaires types ─────────────────────────────────────
   await db.query(
-    `INSERT INTO shift_templates (company_id, name, start_time, end_time, break_start, break_end) VALUES
-       ($1, 'Ouverture', '08:30', '14:00', NULL, NULL),
-       ($1, 'Fermeture', '14:00', '20:00', NULL, NULL),
-       ($1, 'Journée',   '09:00', '18:00', '12:30', '13:30')`,
-    [companyId]
+    `INSERT INTO shift_templates (company_id, name, start_time, end_time, break_start, break_end, color)
+     SELECT $1, s.name, s.start_time::time, s.end_time::time, s.break_start::time, s.break_end::time, s.color
+     FROM json_to_recordset($2) AS s(name text, start_time text, end_time text, break_start text, break_end text, color text)`,
+    [companyId, JSON.stringify(Object.values(SLOTS).map((s) => ({
+      name: s.name, start_time: s.start, end_time: s.end, break_start: s.brk[0], break_end: s.brk[1], color: s.color,
+    })))]
   );
 
   // ── Équipe ─────────────────────────────────────────────
@@ -172,12 +178,10 @@ const main = async () => {
            VALUES ($1,$2,$3,$4,$5,'travail',$6) RETURNING id`,
           [ids[p.first], companyId, iso(date), slot.start, slot.end, adminId]
         )).rows[0].id;
-        if (slot.brk) {
-          await db.query(
-            `INSERT INTO shift_breaks (shift_id, start_time, end_time, label) VALUES ($1,$2,$3,'Pause déjeuner')`,
-            [shiftId, slot.brk[0], slot.brk[1]]
-          );
-        }
+        await db.query(
+          `INSERT INTO shift_breaks (shift_id, start_time, end_time, label) VALUES ($1,$2,$3,'Pause')`,
+          [shiftId, slot.brk[0], slot.brk[1]]
+        );
       }
     }
   }
@@ -212,7 +216,8 @@ const main = async () => {
     [ids.Sarah, iso(addDays(thisMonday, -14)), iso(new Date())]
   )).rows;
   for (const [i, s] of shifts.entries()) {
-    const brk = s.start_time.startsWith('09') ? 60 : 0;
+    const slot = Object.values(SLOTS).find((x) => s.start_time.startsWith(x.start));
+    const brk = slot ? breakMinutes(slot) : 0;
     const [sh, sm] = s.start_time.split(':').map(Number);
     const [eh, em] = s.end_time.split(':').map(Number);
     const total = ((eh * 60 + em) - (sh * 60 + sm) - brk) / 60;

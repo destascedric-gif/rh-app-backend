@@ -7,11 +7,12 @@ const { shiftTemplateSchema } = require('../validators/shiftTemplates.validators
 const ctrl     = require('../controllers/shiftTemplates.controller');
 
 router.use(auth);
-router.use(isAdmin); // seul l'admin crée les créneaux, donc seul lui gère les modèles
 
+// Lecture ouverte à tous (légende des couleurs du planning employé) ;
+// seul l'admin crée les créneaux, donc seul lui gère les modèles.
 router.get   ('/',    ctrl.getShiftTemplates);
-router.post  ('/',    validate(shiftTemplateSchema), ctrl.createShiftTemplate);
-router.put   ('/:id', validate(shiftTemplateSchema), ctrl.updateShiftTemplate);
-router.delete('/:id', ctrl.deleteShiftTemplate);
+router.post  ('/',    isAdmin, validate(shiftTemplateSchema), ctrl.createShiftTemplate);
+router.put   ('/:id', isAdmin, validate(shiftTemplateSchema), ctrl.updateShiftTemplate);
+router.delete('/:id', isAdmin, ctrl.deleteShiftTemplate);
 
 module.exports = router;

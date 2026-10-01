@@ -16,3 +16,7 @@ CREATE TABLE IF NOT EXISTS shift_templates (
 );
 
 CREATE INDEX IF NOT EXISTS idx_shift_templates_company ON shift_templates(company_id);
+
+-- Couleur propre à chaque horaire type (attribuée à la création, modifiable
+-- dans Paramètres) ; les créneaux du planning en prennent la couleur.
+ALTER TABLE shift_templates ADD COLUMN IF NOT EXISTS color VARCHAR(7);
