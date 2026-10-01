@@ -2,6 +2,7 @@ const db                  = require('../config/db');
 const { computePayroll }  = require('../services/payroll.service');
 const { generatePayslipPDF } = require('../services/pdf.service');
 const { toLocalDateString } = require('../utils/date');
+const { getMeetingExtraHours } = require('../services/meetingHours.service');
 
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin',
                  'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -28,7 +29,9 @@ const getScheduledHours = async (userId, companyId, periodStart, periodEnd) => {
   );
   const grossHours = parseFloat(grossResult.rows[0].hours);
   const breakHours = parseFloat(breakResult.rows[0].hours);
-  return Math.max(0, grossHours - breakHours);
+  // Réunions hors créneau, si l'entreprise les compte comme travail
+  const meetingHours = await getMeetingExtraHours(userId, companyId, periodStart, periodEnd);
+  return Math.max(0, grossHours - breakHours) + meetingHours;
 };
 
 const getUnpaidLeaveDays = async (userId, companyId, periodStart, periodEnd) => {

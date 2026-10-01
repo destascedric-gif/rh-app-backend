@@ -19,3 +19,9 @@ ALTER TABLE company
   ADD COLUMN IF NOT EXISTS overtime_tier2_rate            NUMERIC(3,2) DEFAULT 1.50,
   ADD COLUMN IF NOT EXISTS overtime_tier2_threshold_hours NUMERIC(4,2) DEFAULT 43,
   ADD COLUMN IF NOT EXISTS primary_color                  VARCHAR(7)   DEFAULT '#1C4ED8';
+
+-- Planning : le gérant peut figurer dans le planning (toute petite équipe),
+-- et le temps de réunion hors créneau peut compter comme travail.
+ALTER TABLE company
+  ADD COLUMN IF NOT EXISTS manager_in_schedule    BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS meetings_count_as_work BOOLEAN NOT NULL DEFAULT FALSE;

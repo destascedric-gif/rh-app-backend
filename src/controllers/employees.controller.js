@@ -31,19 +31,26 @@ const getPendingTimesheets = async (req, res) => {
 
 // GET /api/employees
 // Retourne tous les employés actifs de l'entreprise
+// ?planning=1 : liste des personnes du planning, qui inclut le gérant si
+// l'entreprise l'a choisi (Paramètres). Sinon, uniquement les employés
+// (équipe, paie, abonnement ne comptent jamais le gérant).
 const getEmployees = async (req, res) => {
   const { companyId } = req.user;
+  const forPlanning = req.query.planning === '1';
 
   try {
     const result = await db.query(
       `SELECT
-         id, first_name, last_name, email, phone,
-         job_title, department, contract_type, work_time, weekly_hours,
-         hire_date, gross_salary, photo_url, is_active, invite_accepted
-       FROM users
-       WHERE company_id = $1 AND role = 'employee'
-       ORDER BY last_name, first_name`,
-      [companyId]
+         u.id, u.first_name, u.last_name, u.email, u.phone, u.role,
+         CASE WHEN u.role = 'admin' THEN COALESCE(NULLIF(u.job_title, ''), 'Gérant') ELSE u.job_title END AS job_title,
+         u.department, u.contract_type, u.work_time, u.weekly_hours,
+         u.hire_date, u.gross_salary, u.photo_url, u.is_active, u.invite_accepted
+       FROM users u
+       JOIN company c ON c.id = u.company_id
+       WHERE u.company_id = $1
+         AND (u.role = 'employee' OR ($2 AND u.role = 'admin' AND c.manager_in_schedule))
+       ORDER BY (u.role = 'admin') DESC, u.last_name, u.first_name`,
+      [companyId, forPlanning]
     );
     res.json(result.rows);
   } catch (err) {

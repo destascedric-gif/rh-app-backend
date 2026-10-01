@@ -9,7 +9,7 @@ const getSettings = async (req, res) => {
     const result = await db.query(
       `SELECT name, sector, default_weekly_hours, leave_accrual_per_month,
               overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
-              primary_color
+              primary_color, manager_in_schedule, meetings_count_as_work
        FROM company WHERE id = $1`,
       [companyId]
     );
@@ -31,7 +31,7 @@ const updateSettings = async (req, res) => {
   const {
     defaultWeeklyHours, leaveAccrualPerMonth,
     overtimeTier1Rate, overtimeTier2Rate, overtimeTier2ThresholdHours,
-    primaryColor,
+    primaryColor, managerInSchedule, meetingsCountAsWork,
   } = req.body;
 
   try {
@@ -44,13 +44,15 @@ const updateSettings = async (req, res) => {
          overtime_tier1_rate            = COALESCE($3, overtime_tier1_rate),
          overtime_tier2_rate            = COALESCE($4, overtime_tier2_rate),
          overtime_tier2_threshold_hours = COALESCE($5, overtime_tier2_threshold_hours),
-         primary_color                  = COALESCE($6, primary_color)
+         primary_color                  = COALESCE($6, primary_color),
+         manager_in_schedule            = COALESCE($8, manager_in_schedule),
+         meetings_count_as_work         = COALESCE($9, meetings_count_as_work)
        WHERE id = $7
        RETURNING default_weekly_hours, leave_accrual_per_month,
                  overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
-                 primary_color`,
+                 primary_color, manager_in_schedule, meetings_count_as_work`,
       [defaultWeeklyHours, leaveAccrualPerMonth, overtimeTier1Rate, overtimeTier2Rate,
-       overtimeTier2ThresholdHours, primaryColor, companyId]
+       overtimeTier2ThresholdHours, primaryColor, companyId, managerInSchedule, meetingsCountAsWork]
     );
 
     if (result.rows.length === 0) {

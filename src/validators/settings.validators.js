@@ -22,6 +22,8 @@ const updateSettingsSchema = z.object({
   overtimeTier2Rate: boundedNumber('La majoration du palier 2', 1.1, 3, OVERTIME_MIN_MESSAGE),
   overtimeTier2ThresholdHours: boundedNumber('Le seuil du palier 2', 35, 48,
     'Le seuil du palier 2 doit être d\'au moins 35 h.'),
+  managerInSchedule:   z.boolean({ error: 'Valeur invalide.' }).optional(),
+  meetingsCountAsWork: z.boolean({ error: 'Valeur invalide.' }).optional(),
   primaryColor: z.string().trim()
     .regex(/^#[0-9A-Fa-f]{6}$/, 'Couleur invalide (format hex, ex. #1C4ED8).')
     .optional().or(z.literal('')),

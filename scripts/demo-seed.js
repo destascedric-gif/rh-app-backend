@@ -89,7 +89,8 @@ const main = async () => {
               plan = 'pro', primary_color = DEFAULT,
               default_weekly_hours = DEFAULT, leave_accrual_per_month = $7,
               overtime_tier1_rate = DEFAULT, overtime_tier2_rate = DEFAULT,
-              overtime_tier2_threshold_hours = DEFAULT
+              overtime_tier2_threshold_hours = DEFAULT,
+              manager_in_schedule = DEFAULT, meetings_count_as_work = DEFAULT
        WHERE id = $6`,
       [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector, companyId, DEFAULT_LEAVE_ACCRUAL]
     );
