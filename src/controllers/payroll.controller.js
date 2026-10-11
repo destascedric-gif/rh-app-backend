@@ -2,36 +2,66 @@ const db                  = require('../config/db');
 const { computePayroll }  = require('../services/payroll.service');
 const { generatePayslipPDF } = require('../services/pdf.service');
 const { toLocalDateString } = require('../utils/date');
-const { getMeetingExtraHours } = require('../services/meetingHours.service');
+const { getMeetingExtraMinutesByDay } = require('../services/meetingHours.service');
 
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin',
                  'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 // ─────────────────────────────────────────────
-// Heures planifiées + absences non rémunérées sur une période,
+// Heures planifiées semaine par semaine + absences non rémunérées,
 // pour faire entrer le planning et les congés dans le calcul de paie.
 // ─────────────────────────────────────────────
-const getScheduledHours = async (userId, companyId, periodStart, periodEnd) => {
-  const grossResult = await db.query(
-    `SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 3600), 0) AS hours
+
+// Semaines (lundi → dimanche) rattachées à un mois : celles qui se
+// terminent dans le mois. La semaine à cheval sur la fin du mois est
+// payée le mois suivant, avec ses heures supplémentaires.
+const weeksOfMonth = (month, year) => {
+  const lastDay = new Date(year, month, 0);
+  const firstSunday = new Date(year, month - 1, 1);
+  firstSunday.setDate(1 + ((7 - firstSunday.getDay()) % 7));
+  const weeks = [];
+  for (let sunday = new Date(firstSunday); sunday <= lastDay; sunday.setDate(sunday.getDate() + 7)) {
+    const monday = new Date(sunday);
+    monday.setDate(sunday.getDate() - 6);
+    weeks.push({ start: toLocalDateString(monday), end: toLocalDateString(sunday) });
+  }
+  return weeks;
+};
+
+// Heures nettes de chaque semaine du mois : créneaux de travail moins les
+// pauses, plus les réunions hors créneau si l'entreprise les compte.
+const getWeeklyHours = async (userId, companyId, month, year) => {
+  const weeks = weeksOfMonth(month, year);
+  if (weeks.length === 0) return [];
+  const start = weeks[0].start;
+  const end = weeks[weeks.length - 1].end;
+
+  const result = await db.query(
+    `SELECT s.date,
+            EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60
+              - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.end_time - b.start_time)) / 60)
+                          FROM shift_breaks b WHERE b.shift_id = s.id), 0) AS minutes
      FROM shifts s
      WHERE s.user_id = $1 AND s.company_id = $2 AND s.type = 'travail'
        AND s.date BETWEEN $3 AND $4`,
-    [userId, companyId, periodStart, periodEnd]
+    [userId, companyId, start, end]
   );
-  const breakResult = await db.query(
-    `SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (sb.end_time - sb.start_time)) / 3600), 0) AS hours
-     FROM shift_breaks sb
-     JOIN shifts s ON s.id = sb.shift_id
-     WHERE s.user_id = $1 AND s.company_id = $2 AND s.type = 'travail'
-       AND s.date BETWEEN $3 AND $4`,
-    [userId, companyId, periodStart, periodEnd]
-  );
-  const grossHours = parseFloat(grossResult.rows[0].hours);
-  const breakHours = parseFloat(breakResult.rows[0].hours);
-  // Réunions hors créneau, si l'entreprise les compte comme travail
-  const meetingHours = await getMeetingExtraHours(userId, companyId, periodStart, periodEnd);
-  return Math.max(0, grossHours - breakHours) + meetingHours;
+  const minutesByDay = {};
+  for (const row of result.rows) {
+    const day = toLocalDateString(row.date);
+    minutesByDay[day] = (minutesByDay[day] ?? 0) + Math.max(0, parseFloat(row.minutes));
+  }
+  const meetingMinutes = await getMeetingExtraMinutesByDay(userId, companyId, start, end);
+  for (const [day, minutes] of Object.entries(meetingMinutes)) {
+    minutesByDay[day] = (minutesByDay[day] ?? 0) + minutes;
+  }
+
+  return weeks.map((w) => ({
+    start: w.start,
+    hours: Object.entries(minutesByDay)
+      .filter(([day]) => day >= w.start && day <= w.end)
+      .reduce((sum, [, minutes]) => sum + minutes, 0) / 60,
+  }));
 };
 
 const getUnpaidLeaveDays = async (userId, companyId, periodStart, periodEnd) => {
@@ -65,8 +95,8 @@ const buildPayrollInputs = async (employee, companyId, month, year) => {
   const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
   const periodEnd    = toLocalDateString(new Date(year, month, 0));
 
-  const [scheduledHours, unpaidLeaveDays, policy] = await Promise.all([
-    getScheduledHours(employee.id, companyId, periodStart, periodEnd),
+  const [weeks, unpaidLeaveDays, policy] = await Promise.all([
+    getWeeklyHours(employee.id, companyId, month, year),
     getUnpaidLeaveDays(employee.id, companyId, periodStart, periodEnd),
     getCompanyPolicy(companyId),
   ]);
@@ -74,7 +104,8 @@ const buildPayrollInputs = async (employee, companyId, month, year) => {
   return {
     grossSalary:     employee.gross_salary,
     weeklyHours:     employee.weekly_hours ?? 35,
-    scheduledHours:  scheduledHours > 0 ? scheduledHours : null,
+    // Sans aucun créneau, le planning n'est pas pris en compte
+    weeks:           weeks.some((w) => w.hours > 0) ? weeks : [],
     unpaidLeaveDays,
     ...policy,
   };

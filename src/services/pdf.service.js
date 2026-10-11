@@ -145,7 +145,13 @@ const generatePayslipPDF = ({
     // ── RÉCAPITULATIF NET ────────────────────────────────
     const recap = [];
     if (cotisations.overtime?.hours > 0) {
-      recap.push({ label: `Heures supplémentaires (${cotisations.overtime.hours} h)`, val: `+ ${fmt(cotisations.overtime.pay)}` });
+      const o = cotisations.overtime;
+      const complementary = (o.complementaryLowHours ?? 0) + (o.complementaryHighHours ?? 0);
+      const supplementary = (o.tier1Hours ?? 0) + (o.tier2Hours ?? 0);
+      const label = complementary > 0 && supplementary > 0
+        ? `Heures complémentaires et supplémentaires (${o.hours} h)`
+        : complementary > 0 ? `Heures complémentaires (${o.hours} h)` : `Heures supplémentaires (${o.hours} h)`;
+      recap.push({ label, val: `+ ${fmt(o.pay)}` });
     }
     if (cotisations.absence?.days > 0) {
       recap.push({ label: `Absence non rémunérée (${cotisations.absence.days} j)`, val: `- ${fmt(cotisations.absence.deduction)}` });

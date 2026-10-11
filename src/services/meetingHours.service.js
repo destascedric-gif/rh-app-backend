@@ -53,10 +53,10 @@ const meetingsCountAsWork = async (companyId) => {
   return Boolean(result.rows[0]?.meetings_count_as_work);
 };
 
-// Heures de réunion à ajouter aux heures planifiées d'un employé sur une
-// période (0 si l'entreprise ne compte pas les réunions)
-const getMeetingExtraHours = async (userId, companyId, periodStart, periodEnd) => {
-  if (!(await meetingsCountAsWork(companyId))) return 0;
+// Minutes de réunion à ajouter, jour par jour, aux heures planifiées d'un
+// employé sur une période ({} si l'entreprise ne compte pas les réunions)
+const getMeetingExtraMinutesByDay = async (userId, companyId, periodStart, periodEnd) => {
+  if (!(await meetingsCountAsWork(companyId))) return {};
 
   const meetings = (await db.query(
     `SELECT m.date, m.start_time, m.end_time
@@ -65,7 +65,7 @@ const getMeetingExtraHours = async (userId, companyId, periodStart, periodEnd) =
      WHERE m.company_id = $2 AND m.date BETWEEN $3 AND $4`,
     [userId, companyId, periodStart, periodEnd]
   )).rows;
-  if (meetings.length === 0) return 0;
+  if (meetings.length === 0) return {};
 
   const shifts = (await db.query(
     `SELECT id, date, start_time, end_time, type FROM shifts
@@ -82,12 +82,12 @@ const getMeetingExtraHours = async (userId, companyId, periodStart, periodEnd) =
     (byDay[toLocalDateString(m.date)] ??= []).push([toMin(m.start_time), toMin(m.end_time)]);
   }
 
-  let minutes = 0;
+  const minutesByDay = {};
   for (const [day, intervals] of Object.entries(byDay)) {
     const shift = shifts.find((s) => toLocalDateString(s.date) === day);
-    minutes += extraMinutesForDay(intervals, shift, shift ? breaks.filter((b) => b.shift_id === shift.id) : []);
+    minutesByDay[day] = extraMinutesForDay(intervals, shift, shift ? breaks.filter((b) => b.shift_id === shift.id) : []);
   }
-  return minutes / 60;
+  return minutesByDay;
 };
 
-module.exports = { getMeetingExtraHours, extraMinutesForDay };
+module.exports = { getMeetingExtraMinutesByDay, extraMinutesForDay };
