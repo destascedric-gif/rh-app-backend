@@ -151,6 +151,70 @@ const getMySchedule = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────
+// LECTURE — PLANNING DE L'ÉQUIPE (vu par un employé)
+// ─────────────────────────────────────────────
+
+// GET /api/schedule/team?start=2026-10-01&end=2026-10-31
+// Seulement si le gérant l'a autorisé (Paramètres → Planning). Les données
+// sont nettoyées ici, jamais à l'écran : un congé ou une absence devient
+// « absent » (aucun motif), sans note, pause ni heures.
+const getTeamSchedule = async (req, res) => {
+  const { companyId } = req.user;
+  const { start, end } = req.query;
+
+  if (!start || !end) {
+    return res.status(400).json({ message: 'Paramètres start et end requis.' });
+  }
+
+  try {
+    const company = (await db.query(
+      'SELECT team_schedule_visible, manager_in_schedule FROM company WHERE id = $1',
+      [companyId]
+    )).rows[0];
+    if (!company?.team_schedule_visible) {
+      return res.status(403).json({ message: 'Le planning de l\'équipe n\'est pas partagé par votre gérant.' });
+    }
+
+    const people = (await db.query(
+      `SELECT id, first_name, last_name,
+              CASE WHEN role = 'admin' THEN COALESCE(NULLIF(job_title, ''), 'Gérant') ELSE job_title END AS job_title
+       FROM users
+       WHERE company_id = $1 AND is_active = TRUE
+         AND (role = 'employee' OR (role = 'admin' AND $2))
+       ORDER BY (role = 'admin') DESC, last_name, first_name`,
+      [companyId, company.manager_in_schedule]
+    )).rows;
+
+    const result = await db.query(
+      `SELECT s.id, s.user_id, s.company_id, s.date, s.start_time, s.end_time, s.type,
+              u.first_name, u.last_name
+       FROM shifts s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.company_id = $1 AND s.date BETWEEN $2 AND $3 AND s.user_id = ANY($4)
+       ORDER BY s.date`,
+      [companyId, start, end, people.map((p) => p.id)]
+    );
+    const enriched = await enrichShifts(result.rows);
+    const shifts = enriched.map((s) => ({
+      id:         s.id,
+      user_id:    s.user_id,
+      date:       s.date,
+      start_time: s.start_time,
+      end_time:   s.end_time,
+      type:       s.type === 'conge' || s.type === 'absence' ? 'absent' : (s.type || 'travail'),
+      color:      s.color,
+      first_name: s.first_name,
+      last_name:  s.last_name,
+    }));
+
+    res.json({ people, shifts });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// ─────────────────────────────────────────────
 // CRÉATION D'UN CRÉNEAU — ADMIN
 // ─────────────────────────────────────────────
 
@@ -292,6 +356,7 @@ const deleteShift = async (req, res) => {
 module.exports = {
   getAdminSchedule,
   getMySchedule,
+  getTeamSchedule,
   createShift,
   updateShift,
   deleteShift,

@@ -24,6 +24,7 @@ const updateSettingsSchema = z.object({
     'Le seuil du palier 2 doit être d\'au moins 35 h.'),
   managerInSchedule:   z.boolean({ error: 'Valeur invalide.' }).optional(),
   meetingsCountAsWork: z.boolean({ error: 'Valeur invalide.' }).optional(),
+  teamScheduleVisible: z.boolean({ error: 'Valeur invalide.' }).optional(),
   primaryColor: z.string().trim()
     .regex(/^#[0-9A-Fa-f]{6}$/, 'Couleur invalide (format hex, ex. #1C4ED8).')
     .optional().or(z.literal('')),

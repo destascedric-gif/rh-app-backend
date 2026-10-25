@@ -10,6 +10,7 @@ router.use(auth);
 
 // ── Employé ───────────────────────────────────────────
 router.get('/my', ctrl.getMySchedule);              // Mon planning perso
+router.get('/team', ctrl.getTeamSchedule);          // Planning de l'équipe, si le gérant l'autorise
 
 // ── Admin ─────────────────────────────────────────────
 router.get ('/admin',      isAdmin, ctrl.getAdminSchedule); // Planning tous employés

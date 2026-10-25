@@ -25,3 +25,8 @@ ALTER TABLE company
 ALTER TABLE company
   ADD COLUMN IF NOT EXISTS manager_in_schedule    BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS meetings_count_as_work BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Les employés peuvent voir le planning de toute l'équipe (lecture seule,
+-- sans motif d'absence, notes, pauses ni heures)
+ALTER TABLE company
+  ADD COLUMN IF NOT EXISTS team_schedule_visible BOOLEAN NOT NULL DEFAULT FALSE;
