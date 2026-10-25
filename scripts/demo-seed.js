@@ -30,25 +30,24 @@ const COMPANY = {
   address: '12 rue des Tilleuls', postal_code: '77380', city: 'Combs-la-Ville', sector: 'Pharmacie',
 };
 
-// Créneaux types de la pharmacie (ouverte du lundi au samedi, 8h30 – 20h),
-// tous avec une pause, chacun avec sa couleur (palette de shiftColors.js)
+// Horaires types de la pharmacie (ouverte du lundi au samedi, 9h30 – 19h),
+// chacun avec sa pause et sa couleur (palette de shiftColors.js)
 const SLOTS = {
-  O: { name: 'Ouverture', start: '08:30', end: '15:00', brk: ['12:00', '12:30'], color: '#3457D5' },
-  F: { name: 'Fermeture', start: '13:30', end: '20:00', brk: ['16:30', '17:00'], color: '#B9791E' },
-  J: { name: 'Journée',   start: '09:00', end: '18:00', brk: ['12:30', '13:30'], color: '#1F7A5A' },
+  O: { name: 'Ouverture', start: '09:30', end: '18:30', brk: ['12:30', '13:30'], color: '#3457D5' },
+  F: { name: 'Fermeture', start: '10:00', end: '19:00', brk: ['13:30', '14:30'], color: '#B9791E' },
 };
 const breakMinutes = (slot) => {
   const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   return toMin(slot.brk[1]) - toMin(slot.brk[0]);
 };
 
-// Équipe : semaine type du lundi au samedi (O/F/J = créneau, R = repos),
+// Équipe : semaine type du lundi au samedi (O/F = créneau, R = repos),
 // décalée d'un jour chaque semaine pour varier le planning.
 const TEAM = [
-  { first: 'Sarah',  last: 'Benali',   email: EMPLOYEE_EMAIL, job: 'Préparatrice en pharmacie', contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2150, hire: '2022-09-01', week: 'JOFRJO' },
-  { first: 'Julie',  last: 'Moreau',   job: 'Pharmacienne adjointe',     contract: 'CDI', time: 'Temps plein', hours: 35, salary: 3400, hire: '2019-03-15', week: 'OJRFJF' },
-  { first: 'Mehdi',  last: 'Lefèvre',  job: 'Préparateur en pharmacie',  contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2150, hire: '2021-01-04', week: 'FRJOFJ' },
-  { first: 'Camille', last: 'Roux',    job: 'Préparatrice en pharmacie', contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2200, hire: '2023-05-02', week: 'RFOJOJ' },
+  { first: 'Sarah',  last: 'Benali',   email: EMPLOYEE_EMAIL, job: 'Préparatrice en pharmacie', contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2150, hire: '2022-09-01', week: 'FOFROF' },
+  { first: 'Julie',  last: 'Moreau',   job: 'Pharmacienne adjointe',     contract: 'CDI', time: 'Temps plein', hours: 35, salary: 3400, hire: '2019-03-15', week: 'OFRFOF' },
+  { first: 'Mehdi',  last: 'Lefèvre',  job: 'Préparateur en pharmacie',  contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2150, hire: '2021-01-04', week: 'FROOFO' },
+  { first: 'Camille', last: 'Roux',    job: 'Préparatrice en pharmacie', contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2200, hire: '2023-05-02', week: 'RFOFOF' },
   { first: 'Inès',   last: 'Fontaine', job: 'Apprentie préparatrice',    contract: 'Alternance', time: 'Temps partiel', hours: 28, salary: 1100, hire: '2025-09-01', week: 'ORFROF' },
   { first: 'Thomas', last: 'Girard',   job: 'Rayonniste',                contract: 'CDD', time: 'Temps partiel', hours: 24, salary: 1450, hire: '2026-04-01', week: 'RORFRF' },
 ];
