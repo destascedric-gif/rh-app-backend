@@ -36,20 +36,30 @@ const SLOTS = {
   O: { name: 'Ouverture', start: '09:30', end: '18:30', brk: ['12:30', '13:30'], color: '#3457D5' },
   F: { name: 'Fermeture', start: '10:00', end: '19:00', brk: ['13:30', '14:30'], color: '#B9791E' },
 };
+// Demi-journées saisies à la main (pas des horaires types, donc couleur
+// « Autre horaire ») : elles complètent les semaines au bon nombre d'heures.
+const HALF_DAYS = {
+  D: { start: '10:00', end: '13:00' }, // 3 h : 4 journées + D = 35 h
+  Q: { start: '10:00', end: '14:00' }, // 4 h : 3 journées + Q = 28 h
+};
 const breakMinutes = (slot) => {
   const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   return toMin(slot.brk[1]) - toMin(slot.brk[0]);
 };
 
-// Équipe : semaine type du lundi au samedi (O/F = créneau, R = repos),
-// décalée d'un jour chaque semaine pour varier le planning.
+// Équipe : semaine type du lundi au samedi (O/F = horaire type, D/Q =
+// demi-journée, R = repos), décalée d'un jour chaque semaine pour varier le
+// planning. Semaine type = durée du contrat (35 h, 28 h, 24 h). Pendant les
+// « overtime » (n° de semaine, 4 = semaine en cours), la demi-journée devient
+// une journée entière : 40 h, soit 5 h supplémentaires (ou des heures
+// complémentaires pour un temps partiel) — de quoi montrer les deux cas.
 const TEAM = [
-  { first: 'Sarah',  last: 'Benali',   email: EMPLOYEE_EMAIL, job: 'Préparatrice en pharmacie', contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2150, hire: '2022-09-01', week: 'FOFROF' },
-  { first: 'Julie',  last: 'Moreau',   job: 'Pharmacienne adjointe',     contract: 'CDI', time: 'Temps plein', hours: 35, salary: 3400, hire: '2019-03-15', week: 'OFRFOF' },
-  { first: 'Mehdi',  last: 'Lefèvre',  job: 'Préparateur en pharmacie',  contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2150, hire: '2021-01-04', week: 'FROOFO' },
-  { first: 'Camille', last: 'Roux',    job: 'Préparatrice en pharmacie', contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2200, hire: '2023-05-02', week: 'RFOFOF' },
-  { first: 'Inès',   last: 'Fontaine', job: 'Apprentie préparatrice',    contract: 'Alternance', time: 'Temps partiel', hours: 28, salary: 1100, hire: '2025-09-01', week: 'ORFROF' },
-  { first: 'Thomas', last: 'Girard',   job: 'Rayonniste',                contract: 'CDD', time: 'Temps partiel', hours: 24, salary: 1450, hire: '2026-04-01', week: 'RORFRF' },
+  { first: 'Sarah',  last: 'Benali',   email: EMPLOYEE_EMAIL, job: 'Préparatrice en pharmacie', contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2150, hire: '2022-09-01', week: 'FOFRDF', overtime: [4, 6] },
+  { first: 'Julie',  last: 'Moreau',   job: 'Pharmacienne adjointe',     contract: 'CDI', time: 'Temps plein', hours: 35, salary: 3400, hire: '2019-03-15', week: 'OFRFDO', overtime: [] },
+  { first: 'Mehdi',  last: 'Lefèvre',  job: 'Préparateur en pharmacie',  contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2150, hire: '2021-01-04', week: 'FRODFO', overtime: [1, 4, 6] },
+  { first: 'Camille', last: 'Roux',    job: 'Préparatrice en pharmacie', contract: 'CDI', time: 'Temps plein', hours: 35, salary: 2200, hire: '2023-05-02', week: 'RFODOF', overtime: [3] },
+  { first: 'Inès',   last: 'Fontaine', job: 'Apprentie préparatrice',    contract: 'Alternance', time: 'Temps partiel', hours: 28, salary: 1100, hire: '2025-09-01', week: 'ORFRQF', overtime: [4] },
+  { first: 'Thomas', last: 'Girard',   job: 'Rayonniste',                contract: 'CDD', time: 'Temps partiel', hours: 24, salary: 1450, hire: '2026-04-01', week: 'RORFRF', overtime: [] },
 ];
 
 const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
@@ -170,12 +180,22 @@ const main = async () => {
           );
           continue;
         }
-        const code = p.week[(d + w) % 6];
+        let code = p.week[(d + w) % 6];
+        if (HALF_DAYS[code] && p.overtime.includes(w)) code = 'O';
         if (code === 'R') {
           await db.query(
             `INSERT INTO shifts (user_id, company_id, date, start_time, end_time, type, created_by)
              VALUES ($1,$2,$3,'00:00','23:59','repos',$4)`,
             [ids[p.first], companyId, iso(date), adminId]
+          );
+          continue;
+        }
+        if (HALF_DAYS[code]) {
+          const half = HALF_DAYS[code];
+          await db.query(
+            `INSERT INTO shifts (user_id, company_id, date, start_time, end_time, type, created_by)
+             VALUES ($1,$2,$3,$4,$5,'travail',$6)`,
+            [ids[p.first], companyId, iso(date), half.start, half.end, adminId]
           );
           continue;
         }
@@ -242,7 +262,7 @@ const main = async () => {
     [ids.Sarah, iso(addDays(thisMonday, -14)), iso(new Date())]
   )).rows;
   for (const [i, s] of shifts.entries()) {
-    const slot = Object.values(SLOTS).find((x) => s.start_time.startsWith(x.start));
+    const slot = Object.values(SLOTS).find((x) => s.start_time.startsWith(x.start) && s.end_time.startsWith(x.end));
     const brk = slot ? breakMinutes(slot) : 0;
     const [sh, sm] = s.start_time.split(':').map(Number);
     const [eh, em] = s.end_time.split(':').map(Number);
