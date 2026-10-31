@@ -50,10 +50,16 @@ const reviewTimesheetSchema = z.object({
   status: z.enum(['validé', 'refusé'], { error: 'Statut invalide. Valeurs : validé, refusé.' }),
 });
 
+// PUT /order — liste des id, du haut vers le bas du planning
+const reorderEmployeesSchema = z.object({
+  order: z.array(requiredString('Chaque identifiant')).min(1, 'La liste est vide.'),
+});
+
 module.exports = {
   updateEmployeeSchema,
   addDocumentSchema,
   timesheetSchema,
   updateTimesheetSchema,
   reviewTimesheetSchema,
+  reorderEmployeesSchema,
 };

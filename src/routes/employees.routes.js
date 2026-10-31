@@ -9,6 +9,7 @@ const {
   timesheetSchema,
   updateTimesheetSchema,
   reviewTimesheetSchema,
+  reorderEmployeesSchema,
 } = require('../validators/employees.validators');
 const ctrl     = require('../controllers/employees.controller');
 
@@ -27,6 +28,8 @@ router.get   ('/timesheets/pending', isAdmin, ctrl.getPendingTimesheets);
 
 // ── Liste & fiche ──────────────────────────────────────
 router.get   ('/',    isAdmin, ctrl.getEmployees);        // Liste tous les employés
+// Déclarée avant "/:id" pour ne pas être capturée par ce paramètre.
+router.put   ('/order', isAdmin, validate(reorderEmployeesSchema), ctrl.reorderEmployees); // Ordre dans le planning
 router.get   ('/:id', isAdmin, ctrl.getEmployee);         // Fiche détaillée
 router.put   ('/:id', isAdmin, validate(updateEmployeeSchema), ctrl.updateEmployee); // Modifier la fiche
 router.delete('/:id', isAdmin, ctrl.deactivateEmployee);  // Désactiver (soft delete)

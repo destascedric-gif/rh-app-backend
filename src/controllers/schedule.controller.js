@@ -181,7 +181,7 @@ const getTeamSchedule = async (req, res) => {
        FROM users
        WHERE company_id = $1 AND is_active = TRUE
          AND (role = 'employee' OR (role = 'admin' AND $2))
-       ORDER BY (role = 'admin') DESC, last_name, first_name`,
+       ORDER BY schedule_order NULLS LAST, (role = 'admin') DESC, last_name, first_name`,
       [companyId, company.manager_in_schedule]
     )).rows;
 

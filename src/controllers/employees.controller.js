@@ -49,13 +49,45 @@ const getEmployees = async (req, res) => {
        JOIN company c ON c.id = u.company_id
        WHERE u.company_id = $1
          AND (u.role = 'employee' OR ($2 AND u.role = 'admin' AND c.manager_in_schedule))
-       ORDER BY (u.role = 'admin') DESC, u.last_name, u.first_name`,
+       ORDER BY CASE WHEN $2 THEN u.schedule_order END NULLS LAST,
+                (u.role = 'admin') DESC, u.last_name, u.first_name`,
       [companyId, forPlanning]
     );
     res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// ─────────────────────────────────────────────
+// ORDRE DES EMPLOYÉS DANS LE PLANNING (glisser-déposer)
+// ─────────────────────────────────────────────
+
+// PUT /api/employees/order — body: { order: [userId, userId, ...] } du haut
+// vers le bas. On ignore silencieusement les id qui n'appartiennent pas à
+// l'entreprise plutôt que de faire échouer tout le classement.
+const reorderEmployees = async (req, res) => {
+  const { companyId } = req.user;
+  const { order } = req.body;
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    for (let i = 0; i < order.length; i++) {
+      await client.query(
+        'UPDATE users SET schedule_order = $1 WHERE id = $2 AND company_id = $3',
+        [i, order[i], companyId]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ message: 'Ordre enregistré.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  } finally {
+    client.release();
   }
 };
 
@@ -554,6 +586,7 @@ const getMonthlySummary = async (req, res) => {
 
 module.exports = {
   getEmployees,
+  reorderEmployees,
   getEmployee,
   updateEmployee,
   deactivateEmployee,
