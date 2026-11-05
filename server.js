@@ -12,6 +12,7 @@ const payrollRoutes  = require('./src/routes/payroll.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const shiftTemplatesRoutes = require('./src/routes/shiftTemplates.routes');
 const meetingsRoutes = require('./src/routes/meetings.routes');
+const ownerRoutes    = require('./src/routes/owner.routes');
 const billingRoutes  = require('./src/routes/billing.routes');
 const billingCtrl    = require('./src/controllers/billing.controller');
 
@@ -52,6 +53,7 @@ app.use('/api/payroll',   payrollRoutes);
 app.use('/api/settings',  settingsRoutes);
 app.use('/api/shift-templates', shiftTemplatesRoutes);
 app.use('/api/meetings',  meetingsRoutes);
+app.use('/api/owner',     ownerRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

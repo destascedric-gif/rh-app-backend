@@ -149,6 +149,22 @@ const login = async (req, res) => {
 
     const user = result.rows[0];
 
+    // Propriétaire d'Orgaly (page de pilotage) : compte à part, sans
+    // entreprise, même page de connexion que les clients
+    if (!user) {
+      const owner = (await db.query(
+        'SELECT id, email, name, password_hash FROM platform_owners WHERE email = $1 AND password_hash IS NOT NULL',
+        [email]
+      )).rows[0];
+      if (owner && await bcrypt.compare(password, owner.password_hash)) {
+        await db.query('UPDATE platform_owners SET last_login_at = NOW() WHERE id = $1', [owner.id]);
+        return res.json({
+          token: generateToken({ id: owner.id, email: owner.email, role: 'owner', company_id: null }),
+          user: { id: owner.id, firstName: owner.name, lastName: '', email: owner.email, role: 'owner', companyId: null },
+        });
+      }
+    }
+
     if (!user) {
       return res.status(401).json({ message: 'Identifiants incorrects.' });
     }
