@@ -158,6 +158,7 @@ const login = async (req, res) => {
       )).rows[0];
       if (owner && await bcrypt.compare(password, owner.password_hash)) {
         await db.query('UPDATE platform_owners SET last_login_at = NOW() WHERE id = $1', [owner.id]);
+        res.locals.actor = { role: 'owner' }; // non journalisé
         return res.json({
           token: generateToken({ id: owner.id, email: owner.email, role: 'owner', company_id: null }),
           user: { id: owner.id, firstName: owner.name, lastName: '', email: owner.email, role: 'owner', companyId: null },
@@ -168,6 +169,9 @@ const login = async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: 'Identifiants incorrects.' });
     }
+
+    // Journal : la tentative est rattachée au compte, réussie ou non
+    res.locals.actor = { id: user.id, companyId: user.company_id, role: user.role };
 
     if (!user.invite_accepted) {
       return res.status(403).json({ message: 'Vous devez d\'abord accepter votre invitation.' });

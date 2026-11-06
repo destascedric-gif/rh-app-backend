@@ -13,6 +13,7 @@ const settingsRoutes = require('./src/routes/settings.routes');
 const shiftTemplatesRoutes = require('./src/routes/shiftTemplates.routes');
 const meetingsRoutes = require('./src/routes/meetings.routes');
 const ownerRoutes    = require('./src/routes/owner.routes');
+const { activityMiddleware, startActivityPurge } = require('./src/services/activityLog.service');
 const billingRoutes  = require('./src/routes/billing.routes');
 const billingCtrl    = require('./src/controllers/billing.controller');
 
@@ -43,6 +44,8 @@ app.use(cors({
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), billingCtrl.handleWebhook);
 
 app.use(express.json());
+// Journal des actions et temps de réponse (page de pilotage)
+app.use(activityMiddleware);
 
 app.use('/api/auth',      authRoutes);
 app.use('/api/billing',   billingRoutes);
@@ -60,6 +63,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 // Après toutes les routes, avant app.listen : capture les erreurs non
 // gérées par les try/catch des controllers.
 Sentry.setupExpressErrorHandler(app);
+
+startActivityPurge();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur RH démarré sur le port ${PORT}`);

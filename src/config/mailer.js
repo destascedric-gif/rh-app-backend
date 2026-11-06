@@ -10,6 +10,7 @@ const FROM_NAME  = process.env.SMTP_FROM_NAME || 'RH App';
 // Adresses du compte de démonstration (scripts/demo-seed.js) : elles
 // n'existent pas, aucun e-mail ne doit partir vers elles.
 const DEMO_EMAIL_DOMAIN = '@demo.myorgaly.fr';
+const { logActivity } = require('../services/activityLog.service');
 
 const sendMail = async ({ to, subject, html }) => {
   if (String(to).toLowerCase().endsWith(DEMO_EMAIL_DOMAIN)) {
@@ -34,9 +35,11 @@ const sendMail = async ({ to, subject, html }) => {
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    logActivity({ action: 'EMAIL', status: 'error', httpStatus: res.status });
     throw new Error(`Échec de l'envoi via Brevo (${res.status}) : ${body}`);
   }
 
+  logActivity({ action: 'EMAIL', status: 'ok', httpStatus: res.status });
   return res.json();
 };
 

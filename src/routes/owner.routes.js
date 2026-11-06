@@ -12,5 +12,8 @@ router.post('/setup', authLimiter, validate(ownerSetupSchema), ctrl.setupPasswor
 
 // Page de pilotage : propriétaire d'Orgaly uniquement
 router.get('/stats', auth, isOwner, ctrl.getStats);
+router.get('/activity', auth, isOwner, ctrl.getActivity);
+router.get('/health', auth, isOwner, ctrl.getHealth);
+router.get('/companies/:id', auth, isOwner, ctrl.getCompany);
 
 module.exports = router;
