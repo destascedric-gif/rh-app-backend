@@ -20,6 +20,11 @@ const billingCtrl    = require('./src/controllers/billing.controller');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+// En ligne, Railway place un relais devant le serveur : sans ce réglage,
+// tous les visiteurs semblent venir de la même adresse, et la limite de
+// tentatives de connexion (rateLimit.js) serait partagée par tout le monde.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 
 // L'app est accessible depuis plusieurs origines (domaine propre + alias
