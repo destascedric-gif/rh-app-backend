@@ -7,7 +7,7 @@
 // données sont effacées puis recréées autour de la date du jour, pour que la
 // démo ait toujours l'air vivante. Le mot de passe est conservé d'une remise à
 // neuf à l'autre ; il n'est généré qu'à la création et écrit dans
-// ../demo-identifiants.txt (dossier Orgaly, hors des dépôts git).
+// Identifiants/demo-identifiants.txt (dossier Orgaly, hors des dépôts git).
 //
 // Les adresses en @demo.myorgaly.fr ne reçoivent jamais d'e-mail (mailer.js).
 require('dotenv').config();
@@ -23,7 +23,7 @@ const { DEFAULT_LEAVE_ACCRUAL } = require('../src/services/leaves.service');
 
 const ADMIN_EMAIL = `gerant${DEMO_EMAIL_DOMAIN}`;
 const EMPLOYEE_EMAIL = `sarah${DEMO_EMAIL_DOMAIN}`;
-const CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'demo-identifiants.txt');
+const CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'Identifiants', 'demo-identifiants.txt');
 
 const COMPANY = {
   name: 'Pharmacie des Tilleuls (démo)',
