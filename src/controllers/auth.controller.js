@@ -20,6 +20,25 @@ const generateToken = (user) => {
   );
 };
 
+// Envoi de l'email de réinitialisation du mot de passe
+const sendResetPasswordEmail = async (email, firstName, resetToken) => {
+  const resetUrl = `${FRONTEND_URL}/reinitialiser-mot-de-passe?token=${resetToken}`;
+
+  await sendMail({
+    to: email,
+    subject: 'Réinitialisation de votre mot de passe',
+    html: `
+      <h2>Bonjour ${firstName},</h2>
+      <p>Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le lien ci-dessous pour en choisir un nouveau :</p>
+      <a href="${resetUrl}" style="
+        display:inline-block;padding:12px 24px;background:#4F46E5;
+        color:#fff;border-radius:6px;text-decoration:none;font-weight:bold
+      ">Réinitialiser mon mot de passe</a>
+      <p style="color:#888;font-size:12px">Ce lien est valable 1 heure. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+    `,
+  });
+};
+
 // Envoi de l'email d'invitation
 const sendInviteEmail = async (email, firstName, inviteToken) => {
   const inviteUrl = `${FRONTEND_URL}/accept-invite?token=${inviteToken}`;
@@ -398,6 +417,89 @@ const changePassword = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────
+// MOT DE PASSE OUBLIÉ (réinitialisation par email)
+// ─────────────────────────────────────────────
+
+// POST /api/auth/forgot-password — Demande de réinitialisation. Ne révèle
+// jamais si l'email existe ou non (même réponse dans les deux cas).
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const result = await db.query(
+      `SELECT id, first_name, email FROM users WHERE email = $1 AND is_active = TRUE AND invite_accepted = TRUE`,
+      [email]
+    );
+    const user = result.rows[0];
+
+    if (user) {
+      const resetToken   = crypto.randomBytes(32).toString('hex');
+      const resetExpires = new Date(Date.now() + 60 * 60 * 1000);
+
+      await db.query(
+        `UPDATE users SET reset_token = $1, reset_expires = $2, updated_at = NOW() WHERE id = $3`,
+        [resetToken, resetExpires, user.id]
+      );
+
+      try {
+        await sendResetPasswordEmail(user.email, user.first_name, resetToken);
+      } catch (mailErr) {
+        console.error('Erreur envoi email réinitialisation :', mailErr.message);
+      }
+    }
+
+    res.json({ message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// POST /api/auth/reset-password — Définit le nouveau mot de passe à partir du lien reçu
+const resetPassword = async (req, res) => {
+  const { token, password } = req.body;
+
+  try {
+    const result = await db.query(
+      `SELECT * FROM users WHERE reset_token = $1 AND reset_expires > NOW()`,
+      [token]
+    );
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(400).json({ message: 'Lien de réinitialisation invalide ou expiré.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await db.query(
+      `UPDATE users
+       SET password_hash = $1, reset_token = NULL, reset_expires = NULL, updated_at = NOW()
+       WHERE id = $2`,
+      [passwordHash, user.id]
+    );
+
+    const jwtToken = generateToken(user);
+
+    res.json({
+      message: 'Mot de passe réinitialisé avec succès.',
+      token: jwtToken,
+      user: {
+        id: user.id,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        email: user.email,
+        role: user.role,
+        companyId: user.company_id,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
 module.exports = {
   setupAdmin,
   setupCompany,
@@ -406,4 +508,6 @@ module.exports = {
   resendInvite,
   acceptInvite,
   changePassword,
+  forgotPassword,
+  resetPassword,
 };

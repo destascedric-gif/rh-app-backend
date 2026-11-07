@@ -52,6 +52,15 @@ const changePasswordSchema = z.object({
   newPassword:     password('Le nouveau mot de passe'),
 });
 
+const forgotPasswordSchema = z.object({
+  email: email(),
+});
+
+const resetPasswordSchema = z.object({
+  token:    requiredString('Le token'),
+  password: password('Le nouveau mot de passe'),
+});
+
 module.exports = {
   setupAdminSchema,
   setupCompanySchema,
@@ -59,4 +68,6 @@ module.exports = {
   inviteEmployeeSchema,
   acceptInviteSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 };

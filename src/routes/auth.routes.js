@@ -11,6 +11,8 @@ const {
   inviteEmployeeSchema,
   acceptInviteSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } = require('../validators/auth.validators');
 const ctrl         = require('../controllers/auth.controller');
 
@@ -23,6 +25,10 @@ router.post('/login', authLimiter, validate(loginSchema), ctrl.login);
 
 // ── Compte (utilisateur connecté) ────────────────────
 router.put('/change-password', auth, validate(changePasswordSchema), ctrl.changePassword);
+
+// ── Mot de passe oublié (pas de session) ─────────────
+router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), ctrl.forgotPassword);
+router.post('/reset-password',  authLimiter, validate(resetPasswordSchema),  ctrl.resetPassword);
 
 // ── Invitations (admin seulement) ────────────────────
 router.post('/invite',              auth, isAdmin, validate(inviteEmployeeSchema), ctrl.inviteEmployee); // Créer + inviter un employé
