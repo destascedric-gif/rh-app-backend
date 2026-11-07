@@ -25,6 +25,11 @@ const updateSettingsSchema = z.object({
   managerInSchedule:   z.boolean({ error: 'Valeur invalide.' }).optional(),
   meetingsCountAsWork: z.boolean({ error: 'Valeur invalide.' }).optional(),
   teamScheduleVisible: z.boolean({ error: 'Valeur invalide.' }).optional(),
+  // Lundi → dimanche, '1' = ouvert ; au moins un jour ouvert
+  openDays: z.string({ error: 'Jours d\'ouverture invalides.' })
+    .regex(/^[01]{7}$/, 'Jours d\'ouverture invalides.')
+    .refine((v) => v.includes('1'), 'Cochez au moins un jour d\'ouverture.')
+    .optional(),
   primaryColor: z.string().trim()
     .regex(/^#[0-9A-Fa-f]{6}$/, 'Couleur invalide (format hex, ex. #1C4ED8).')
     .optional().or(z.literal('')),

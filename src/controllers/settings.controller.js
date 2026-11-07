@@ -9,7 +9,8 @@ const getSettings = async (req, res) => {
     const result = await db.query(
       `SELECT name, sector, default_weekly_hours, leave_accrual_per_month,
               overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
-              primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible
+              primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible,
+              open_days
        FROM company WHERE id = $1`,
       [companyId]
     );
@@ -31,7 +32,7 @@ const updateSettings = async (req, res) => {
   const {
     defaultWeeklyHours, leaveAccrualPerMonth,
     overtimeTier1Rate, overtimeTier2Rate, overtimeTier2ThresholdHours,
-    primaryColor, managerInSchedule, meetingsCountAsWork, teamScheduleVisible,
+    primaryColor, managerInSchedule, meetingsCountAsWork, teamScheduleVisible, openDays,
   } = req.body;
 
   try {
@@ -47,14 +48,16 @@ const updateSettings = async (req, res) => {
          primary_color                  = COALESCE($6, primary_color),
          manager_in_schedule            = COALESCE($8, manager_in_schedule),
          meetings_count_as_work         = COALESCE($9, meetings_count_as_work),
-         team_schedule_visible          = COALESCE($10, team_schedule_visible)
+         team_schedule_visible          = COALESCE($10, team_schedule_visible),
+         open_days                      = COALESCE($11, open_days)
        WHERE id = $7
        RETURNING default_weekly_hours, leave_accrual_per_month,
                  overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
-                 primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible`,
+                 primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible,
+                 open_days`,
       [defaultWeeklyHours, leaveAccrualPerMonth, overtimeTier1Rate, overtimeTier2Rate,
        overtimeTier2ThresholdHours, primaryColor, companyId, managerInSchedule, meetingsCountAsWork,
-       teamScheduleVisible]
+       teamScheduleVisible, openDays]
     );
 
     if (result.rows.length === 0) {
