@@ -11,6 +11,10 @@ router.use(auth);
 // Lecture : le gérant voit toutes les réunions, l'employé les siennes
 router.get('/', ctrl.listMeetings);
 
+// Notifications de réunion de la personne connectée (cloche)
+router.get  ('/notifications',          ctrl.getMyNotifications);
+router.patch('/notifications/read-all', ctrl.markMyNotificationsRead);
+
 // Écriture réservée au gérant
 router.post  ('/',    isAdmin, validate(meetingSchema), ctrl.createMeeting);
 router.put   ('/:id', isAdmin, validate(meetingSchema), ctrl.updateMeeting);

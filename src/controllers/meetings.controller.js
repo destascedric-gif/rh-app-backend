@@ -1,5 +1,15 @@
 const db = require('../config/db');
 const { toLocalDateString } = require('../utils/date');
+const { notifyMeetingChange } = require('../services/meetingNotifications.service');
+
+// Les notifications ne doivent jamais faire échouer l'enregistrement
+const notifySafely = async (change) => {
+  try {
+    await notifyMeetingChange(change);
+  } catch (err) {
+    console.error('Notifications de réunion :', err.message);
+  }
+};
 
 // ─────────────────────────────────────────────
 // UTILITAIRES
@@ -91,6 +101,9 @@ const saveMeeting = async (req, res, meetingId = null) => {
     return res.status(400).json({ message: 'Un des participants est introuvable ou n\'est plus actif.' });
   }
 
+  // État avant modification, pour prévenir les participants de ce qui change
+  const before = meetingId ? await getMeeting(meetingId, companyId) : null;
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -123,7 +136,9 @@ const saveMeeting = async (req, res, meetingId = null) => {
     );
 
     await client.query('COMMIT');
-    res.status(meetingId ? 200 : 201).json(await getMeeting(id, companyId));
+    const after = await getMeeting(id, companyId);
+    await notifySafely({ before, after, actorId: adminId });
+    res.status(meetingId ? 200 : 201).json(after);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
@@ -141,8 +156,9 @@ const updateMeeting = (req, res) => saveMeeting(req, res, req.params.id);
 
 // DELETE /api/meetings/:id
 const deleteMeeting = async (req, res) => {
-  const { companyId } = req.user;
+  const { companyId, id: adminId } = req.user;
   try {
+    const before = await getMeeting(req.params.id, companyId);
     const result = await db.query(
       'DELETE FROM meetings WHERE id = $1 AND company_id = $2 RETURNING id',
       [req.params.id, companyId]
@@ -150,6 +166,7 @@ const deleteMeeting = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Réunion introuvable.' });
     }
+    await notifySafely({ before, after: null, actorId: adminId });
     res.json({ message: 'Réunion supprimée.' });
   } catch (err) {
     console.error(err);
@@ -157,4 +174,43 @@ const deleteMeeting = async (req, res) => {
   }
 };
 
-module.exports = { listMeetings, createMeeting, updateMeeting, deleteMeeting };
+// ─────────────────────────────────────────────
+// NOTIFICATIONS — PARTICIPANT
+// ─────────────────────────────────────────────
+
+// GET /api/meetings/notifications
+const getMyNotifications = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, message, is_read, created_at
+       FROM meeting_notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 20`,
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// PATCH /api/meetings/notifications/read-all
+const markMyNotificationsRead = async (req, res) => {
+  try {
+    await db.query(
+      'UPDATE meeting_notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE',
+      [req.user.id]
+    );
+    res.json({ message: 'Notifications lues.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+module.exports = {
+  listMeetings, createMeeting, updateMeeting, deleteMeeting,
+  getMyNotifications, markMyNotificationsRead,
+};
