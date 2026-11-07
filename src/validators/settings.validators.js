@@ -27,6 +27,13 @@ const updateSettingsSchema = z.object({
   teamScheduleVisible: z.boolean({ error: 'Valeur invalide.' }).optional(),
   // Lundi de Pentecôte = journée de solidarité (travaillé) plutôt que férié
   pentecostMondayWorked: z.boolean({ error: 'Valeur invalide.' }).optional(),
+  // Convention collective : IDCC à 4 chiffres (9999 = aucune), '' = effacer
+  idcc: z.string({ error: 'IDCC invalide.' }).trim()
+    .regex(/^(\d{4})?$/, 'L\'IDCC est un numéro à 4 chiffres (ex. 1996).')
+    .optional(),
+  collectiveAgreement: z.string({ error: 'Intitulé invalide.' }).trim()
+    .max(150, 'Intitulé de la convention : 150 caractères maximum.')
+    .optional(),
   // Lundi → dimanche, '1' = ouvert ; au moins un jour ouvert
   openDays: z.string({ error: 'Jours d\'ouverture invalides.' })
     .regex(/^[01]{7}$/, 'Jours d\'ouverture invalides.')

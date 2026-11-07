@@ -15,6 +15,14 @@ const fmt = (n) => Number(n)
   .split(NBSP).join(' ');
 const fmtPct = (t) => `${(t * 100).toFixed(2)} %`;
 
+// Mention obligatoire : intitulé de la convention collective et son IDCC
+// (9999 = aucune convention : seul le Code du travail s'applique)
+const agreementLabel = ({ idcc, collective_agreement: name }) => {
+  if (!idcc) return 'non renseignée';
+  if (idcc === '9999') return 'aucune (Code du travail)';
+  return name ? `${name} (IDCC ${idcc})` : `IDCC ${idcc}`;
+};
+
 /**
  * Génère un bulletin de paie PDF et le retourne en Buffer
  */
@@ -50,7 +58,8 @@ const generatePayslipPDF = ({
 
     doc.font('Helvetica').fontSize(9).fillColor('#cce0f5')
        .text(`SIRET : ${company.siret ?? '—'}`, 55, 80)
-       .text(`${company.address ?? ''} ${company.postal_code ?? ''} ${company.city ?? ''}`, 55, 92);
+       .text(`${company.address ?? ''} ${company.postal_code ?? ''} ${company.city ?? ''}`, 55, 92)
+       .text(`Convention collective : ${agreementLabel(company)}`, 55, 104, { width: 290, lineBreak: false, ellipsis: true });
 
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11)
        .text('BULLETIN DE PAIE', 350, 68, { width: 190, align: 'right' });
@@ -159,6 +168,8 @@ const generatePayslipPDF = ({
     recap.push({ label: 'Salaire brut',      val: fmt(payslip.gross_amount) });
     recap.push({ label: 'Total cotisations', val: `- ${fmt(cotisations.totalSalarial)}` });
     recap.push({ label: 'Net imposable',     val: fmt(cotisations.netImposable) });
+    // Bulletins générés avant l'ajout du net social : égal au net à payer
+    recap.push({ label: 'Montant net social', val: fmt(cotisations.netSocial ?? payslip.net_amount) });
 
     y += 12;
     const recapHeight = 34 + recap.length * 14;

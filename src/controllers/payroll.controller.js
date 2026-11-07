@@ -156,7 +156,8 @@ const generatePayslip = async (req, res) => {
   try {
     // Récupère l'employé avec son salaire
     const empResult = await db.query(
-      `SELECT u.*, c.name AS company_name, c.siret, c.address, c.city, c.postal_code
+      `SELECT u.*, c.name AS company_name, c.siret, c.address, c.city, c.postal_code,
+              c.idcc AS company_idcc, c.collective_agreement AS company_collective_agreement
        FROM users u
        JOIN company c ON c.id = u.company_id
        WHERE u.id = $1 AND u.company_id = $2`,
@@ -224,11 +225,13 @@ const generatePayslip = async (req, res) => {
     };
 
     const insertResult = await db.query(
-      `INSERT INTO payslips (user_id, company_id, period_month, period_year, gross_amount, net_amount, cotisations_snapshot)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO payslips (user_id, company_id, period_month, period_year, gross_amount, net_amount,
+                             cotisations_snapshot, idcc, collective_agreement)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [userId, companyId, payslip.period_month, payslip.period_year,
-       payslip.gross_amount, payslip.net_amount, JSON.stringify(cotisations)]
+       payslip.gross_amount, payslip.net_amount, JSON.stringify(cotisations),
+       employee.company_idcc, employee.company_collective_agreement]
     );
 
     payslip.id = insertResult.rows[0].id;
@@ -240,6 +243,8 @@ const generatePayslip = async (req, res) => {
       address:     employee.address,
       city:        employee.city,
       postal_code: employee.postal_code,
+      idcc:        employee.company_idcc,
+      collective_agreement: employee.company_collective_agreement,
     };
 
     const pdfBuffer = await generatePayslipPDF({
@@ -278,7 +283,8 @@ const downloadPayslip = async (req, res) => {
       `SELECT p.*,
               u.first_name, u.last_name, u.job_title, u.contract_type,
               u.work_time, u.hire_date, u.gross_salary,
-              c.name AS company_name, c.siret, c.address, c.city, c.postal_code
+              c.name AS company_name, c.siret, c.address, c.city, c.postal_code,
+              c.idcc AS company_idcc, c.collective_agreement AS company_collective_agreement
        FROM payslips p
        JOIN users u   ON u.id = p.user_id
        JOIN company c ON c.id = p.company_id
@@ -311,7 +317,12 @@ const downloadPayslip = async (req, res) => {
     });
 
     const pdfBuffer = await generatePayslipPDF({
-      company:  { name: row.company_name, siret: row.siret, address: row.address, city: row.city, postal_code: row.postal_code },
+      company:  {
+        name: row.company_name, siret: row.siret, address: row.address, city: row.city, postal_code: row.postal_code,
+        // Convention figée à la génération ; bulletins plus anciens : réglage actuel
+        idcc: row.idcc ?? row.company_idcc,
+        collective_agreement: row.idcc ? row.collective_agreement : row.company_collective_agreement,
+      },
       employee: row,
       payslip:  { period_month: row.period_month, period_year: row.period_year, gross_amount: row.gross_amount, net_amount: row.net_amount },
       cotisations,

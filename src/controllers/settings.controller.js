@@ -10,7 +10,7 @@ const getSettings = async (req, res) => {
       `SELECT name, sector, default_weekly_hours, leave_accrual_per_month,
               overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
               primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible,
-              open_days, pentecost_monday_worked
+              open_days, pentecost_monday_worked, idcc, collective_agreement
        FROM company WHERE id = $1`,
       [companyId]
     );
@@ -33,7 +33,7 @@ const updateSettings = async (req, res) => {
     defaultWeeklyHours, leaveAccrualPerMonth,
     overtimeTier1Rate, overtimeTier2Rate, overtimeTier2ThresholdHours,
     primaryColor, managerInSchedule, meetingsCountAsWork, teamScheduleVisible, openDays,
-    pentecostMondayWorked,
+    pentecostMondayWorked, idcc, collectiveAgreement,
   } = req.body;
 
   try {
@@ -53,15 +53,19 @@ const updateSettings = async (req, res) => {
          meetings_count_as_work         = COALESCE($9, meetings_count_as_work),
          team_schedule_visible          = COALESCE($10, team_schedule_visible),
          open_days                      = COALESCE($11, open_days),
-         pentecost_monday_worked        = COALESCE($12, pentecost_monday_worked)
+         pentecost_monday_worked        = COALESCE($12, pentecost_monday_worked),
+         -- Convention : absent = inchangé, chaîne vide = effacé
+         idcc                 = CASE WHEN $13::text IS NULL THEN idcc ELSE NULLIF($13, '') END,
+         collective_agreement = CASE WHEN $14::text IS NULL THEN collective_agreement ELSE NULLIF($14, '') END
        WHERE id = $7
        RETURNING default_weekly_hours, leave_accrual_per_month,
                  overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
                  primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible,
-                 open_days, pentecost_monday_worked`,
+                 open_days, pentecost_monday_worked, idcc, collective_agreement`,
       [defaultWeeklyHours, leaveAccrualPerMonth, overtimeTier1Rate, overtimeTier2Rate,
        overtimeTier2ThresholdHours, primaryColor, companyId, managerInSchedule, meetingsCountAsWork,
-       teamScheduleVisible, openDays, pentecostMondayWorked]
+       teamScheduleVisible, openDays, pentecostMondayWorked,
+       idcc ?? null, collectiveAgreement ?? null]
     );
 
     if (result.rows.length === 0) {

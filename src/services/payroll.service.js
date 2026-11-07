@@ -81,7 +81,7 @@ const WORKING_DAYS_PER_MONTH = 22;
  * @param {number} [params.overtimeTier1Rate=1.25]
  * @param {number} [params.overtimeTier2Rate=1.50]
  * @param {number} [params.overtimeTier2ThresholdHours=43] — seuil hebdo au-delà duquel la majoration passe au palier 2
- * @returns {{ lignes, totalSalarial, netSalary, netImposable, adjustedGross, overtime, absence }}
+ * @returns {{ lignes, totalSalarial, netSalary, netSocial, netImposable, adjustedGross, overtime, absence }}
  */
 const computePayroll = ({
   grossSalary,
@@ -153,8 +153,16 @@ const computePayroll = ({
   const crds      = lignes.find(l => l.label === 'CRDS')?.montant ?? 0;
   const netImposable = parseFloat((netSalary + csgNonDed + crds).toFixed(2));
 
+  // Montant net social (obligatoire sur le bulletin depuis juillet 2023) :
+  // brut moins toutes les cotisations et contributions sociales salariales
+  // obligatoires, CSG/CRDS comprises. Il sert aux CAF pour le RSA et la prime
+  // d'activité. Orgaly ne gère ni mutuelle, ni avantages en nature, ni
+  // titres-restaurant, ni prélèvement à la source : il est donc ici égal au
+  // net à payer. À revoir si l'un de ces éléments est ajouté un jour.
+  const netSocial = netSalary;
+
   return {
-    lignes, totalSalarial, netSalary, netImposable,
+    lignes, totalSalarial, netSalary, netSocial, netImposable,
     adjustedGross: brut,
     overtime: {
       hours: round2(overtimeHours),

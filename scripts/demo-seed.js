@@ -101,7 +101,8 @@ const main = async () => {
               overtime_tier2_threshold_hours = DEFAULT,
               manager_in_schedule = DEFAULT, meetings_count_as_work = DEFAULT,
               team_schedule_visible = DEFAULT, open_days = DEFAULT,
-              pentecost_monday_worked = DEFAULT
+              pentecost_monday_worked = DEFAULT,
+              idcc = '1996', collective_agreement = 'Pharmacie d''officine'
        WHERE id = $6`,
       [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector, companyId, DEFAULT_LEAVE_ACCRUAL]
     );
@@ -112,8 +113,9 @@ const main = async () => {
     // Plan Pro : la démo compte plus de 5 employés, et l'ajout d'un employé
     // doit rester possible pendant une présentation.
     companyId = (await db.query(
-      `INSERT INTO company (name, address, postal_code, city, sector, plan, leave_accrual_per_month)
-       VALUES ($1, $2, $3, $4, $5, 'pro', $6) RETURNING id`,
+      `INSERT INTO company (name, address, postal_code, city, sector, plan, leave_accrual_per_month,
+                           idcc, collective_agreement)
+       VALUES ($1, $2, $3, $4, $5, 'pro', $6, '1996', 'Pharmacie d''officine') RETURNING id`,
       [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector, DEFAULT_LEAVE_ACCRUAL]
     )).rows[0].id;
     adminId = (await db.query(
