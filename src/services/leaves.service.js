@@ -9,8 +9,10 @@
 // Jours ouvrés de congés payés acquis par mois (minimum légal)
 const DEFAULT_LEAVE_ACCRUAL = 2.08;
 
-// Jours fériés français fixes + Pâques (approximatif)
-const getFrenchHolidays = (year) => {
+// Jours fériés français (métropole). Le lundi de Pentecôte est férié, sauf
+// si l'entreprise en fait sa journée de solidarité (réglage
+// company.pentecost_monday_worked) : c'est alors un jour travaillé normal.
+const getFrenchHolidays = (year, { pentecostMondayWorked = false } = {}) => {
   const holidays = [
     `${year}-01-01`, // Jour de l'an
     `${year}-05-01`, // Fête du Travail
@@ -26,14 +28,14 @@ const getFrenchHolidays = (year) => {
   const easterDate = getEasterDate(year);
   const easterMs   = easterDate.getTime();
   const ascension  = new Date(easterMs + 39 * 86400000);
-  const pentecote  = new Date(easterMs + 49 * 86400000);
+  const lundiPentecote = new Date(easterMs + 50 * 86400000);
   const lundiPaques = new Date(easterMs + 86400000);
 
   holidays.push(
     lundiPaques.toISOString().slice(0, 10),
     ascension.toISOString().slice(0, 10),
-    pentecote.toISOString().slice(0, 10),
   );
+  if (!pentecostMondayWorked) holidays.push(lundiPentecote.toISOString().slice(0, 10));
 
   return new Set(holidays);
 };
@@ -65,10 +67,15 @@ const getEasterDate = (year) => {
  * Calcule le nombre de jours ouvrés entre deux dates (inclus)
  * En excluant les samedis, dimanches et jours fériés français
  */
-const countWorkingDays = (startDate, endDate) => {
+const countWorkingDays = (startDate, endDate, holidayOptions = {}) => {
   const start    = new Date(startDate);
   const end      = new Date(endDate);
-  const holidays = getFrenchHolidays(start.getFullYear());
+  // Fériés de chaque année traversée (une demande fin décembre → janvier)
+  const holidaysByYear = new Map();
+  const holidaysOf = (y) => {
+    if (!holidaysByYear.has(y)) holidaysByYear.set(y, getFrenchHolidays(y, holidayOptions));
+    return holidaysByYear.get(y);
+  };
 
   let count = 0;
   const current = new Date(start);
@@ -77,7 +84,7 @@ const countWorkingDays = (startDate, endDate) => {
     const dayOfWeek  = current.getDay();
     const dateStr    = current.toISOString().slice(0, 10);
     const isWeekend  = dayOfWeek === 0 || dayOfWeek === 6;
-    const isHoliday  = holidays.has(dateStr);
+    const isHoliday  = holidaysOf(Number(dateStr.slice(0, 4))).has(dateStr);
 
     if (!isWeekend && !isHoliday) count++;
     current.setDate(current.getDate() + 1);

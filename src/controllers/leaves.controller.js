@@ -1,6 +1,6 @@
 const db          = require('../config/db');
 const { countWorkingDays } = require('../services/leaves.service');
-const { getOrComputeCPBalance, recomputeUsedLeave, yearsBetween } = require('../services/leaveBalance.service');
+const { getOrComputeCPBalance, recomputeUsedLeave, getHolidayOptions, yearsBetween } = require('../services/leaveBalance.service');
 const { sendLeaveApproved, sendLeaveRefused, sendLeaveRequestToAdmin } = require('../services/mail.service');
 const { toLocalDateString } = require('../utils/date');
 
@@ -101,7 +101,7 @@ const submitRequest = async (req, res) => {
   const { leaveType, startDate, endDate, reason } = req.body;
 
   try {
-    const workingDays = countWorkingDays(startDate, endDate);
+    const workingDays = countWorkingDays(startDate, endDate, await getHolidayOptions(companyId));
 
     if (workingDays === 0) {
       return res.status(400).json({ message: 'La période sélectionnée ne contient aucun jour ouvré.' });

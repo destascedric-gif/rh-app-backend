@@ -2,6 +2,12 @@ const db = require('../config/db');
 const { computeLegalBalance, getFrenchHolidays, DEFAULT_LEAVE_ACCRUAL } = require('./leaves.service');
 const { toLocalDateString } = require('../utils/date');
 
+// Réglages de l'entreprise qui changent la liste des jours fériés
+const getHolidayOptions = async (companyId) => {
+  const r = await db.query('SELECT pentecost_monday_worked FROM company WHERE id = $1', [companyId]);
+  return { pentecostMondayWorked: Boolean(r.rows[0]?.pentecost_monday_worked) };
+};
+
 // Calcule (et persiste au passage) le solde de Congés payés d'un employé
 // pour une année de référence donnée — y compris une année future pas
 // encore "vécue", pour ne pas pénaliser une demande anticipée.
@@ -62,7 +68,7 @@ const recomputeUsedLeave = async (userId, companyId, year) => {
     [userId, companyId, `${year}-01-01`, `${year}-12-31`]
   );
 
-  const holidays = getFrenchHolidays(year);
+  const holidays = getFrenchHolidays(year, await getHolidayOptions(companyId));
   const used = {};
   for (const row of result.rows) {
     const dateStr = toLocalDateString(row.date);
@@ -112,6 +118,17 @@ const recomputeAccruedLeave = async (companyId, accrualPerMonth) => {
   }
 };
 
+// Recalcule les jours pris de tous les employés d'une entreprise, pour
+// toutes les années déjà calculées : après un changement de la liste des
+// jours fériés (lundi de Pentecôte travaillé ou non).
+const recomputeCompanyUsedLeave = async (companyId) => {
+  const rows = await db.query(
+    'SELECT DISTINCT user_id, year FROM leave_balances WHERE company_id = $1',
+    [companyId]
+  );
+  for (const row of rows.rows) await recomputeUsedLeave(row.user_id, companyId, row.year);
+};
+
 // Années civiles couvertes par une période (une demande de fin décembre à
 // début janvier touche deux soldes annuels).
 const yearsBetween = (start, end) => {
@@ -122,4 +139,7 @@ const yearsBetween = (start, end) => {
   return years;
 };
 
-module.exports = { getOrComputeCPBalance, recomputeUsedLeave, recomputeAccruedLeave, yearsBetween };
+module.exports = {
+  getOrComputeCPBalance, recomputeUsedLeave, recomputeAccruedLeave, recomputeCompanyUsedLeave,
+  getHolidayOptions, yearsBetween,
+};

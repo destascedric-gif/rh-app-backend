@@ -100,7 +100,8 @@ const main = async () => {
               overtime_tier1_rate = DEFAULT, overtime_tier2_rate = DEFAULT,
               overtime_tier2_threshold_hours = DEFAULT,
               manager_in_schedule = DEFAULT, meetings_count_as_work = DEFAULT,
-              team_schedule_visible = DEFAULT
+              team_schedule_visible = DEFAULT, open_days = DEFAULT,
+              pentecost_monday_worked = DEFAULT
        WHERE id = $6`,
       [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector, companyId, DEFAULT_LEAVE_ACCRUAL]
     );

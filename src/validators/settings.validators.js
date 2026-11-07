@@ -25,6 +25,8 @@ const updateSettingsSchema = z.object({
   managerInSchedule:   z.boolean({ error: 'Valeur invalide.' }).optional(),
   meetingsCountAsWork: z.boolean({ error: 'Valeur invalide.' }).optional(),
   teamScheduleVisible: z.boolean({ error: 'Valeur invalide.' }).optional(),
+  // Lundi de Pentecôte = journée de solidarité (travaillé) plutôt que férié
+  pentecostMondayWorked: z.boolean({ error: 'Valeur invalide.' }).optional(),
   // Lundi → dimanche, '1' = ouvert ; au moins un jour ouvert
   openDays: z.string({ error: 'Jours d\'ouverture invalides.' })
     .regex(/^[01]{7}$/, 'Jours d\'ouverture invalides.')

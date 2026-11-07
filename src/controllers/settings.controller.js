@@ -1,5 +1,5 @@
 const db = require('../config/db');
-const { recomputeAccruedLeave } = require('../services/leaveBalance.service');
+const { recomputeAccruedLeave, recomputeCompanyUsedLeave } = require('../services/leaveBalance.service');
 
 // GET /api/settings
 const getSettings = async (req, res) => {
@@ -10,7 +10,7 @@ const getSettings = async (req, res) => {
       `SELECT name, sector, default_weekly_hours, leave_accrual_per_month,
               overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
               primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible,
-              open_days
+              open_days, pentecost_monday_worked
        FROM company WHERE id = $1`,
       [companyId]
     );
@@ -33,10 +33,13 @@ const updateSettings = async (req, res) => {
     defaultWeeklyHours, leaveAccrualPerMonth,
     overtimeTier1Rate, overtimeTier2Rate, overtimeTier2ThresholdHours,
     primaryColor, managerInSchedule, meetingsCountAsWork, teamScheduleVisible, openDays,
+    pentecostMondayWorked,
   } = req.body;
 
   try {
-    const before = await db.query('SELECT leave_accrual_per_month FROM company WHERE id = $1', [companyId]);
+    const before = await db.query(
+      'SELECT leave_accrual_per_month, pentecost_monday_worked FROM company WHERE id = $1', [companyId]
+    );
 
     const result = await db.query(
       `UPDATE company SET
@@ -49,15 +52,16 @@ const updateSettings = async (req, res) => {
          manager_in_schedule            = COALESCE($8, manager_in_schedule),
          meetings_count_as_work         = COALESCE($9, meetings_count_as_work),
          team_schedule_visible          = COALESCE($10, team_schedule_visible),
-         open_days                      = COALESCE($11, open_days)
+         open_days                      = COALESCE($11, open_days),
+         pentecost_monday_worked        = COALESCE($12, pentecost_monday_worked)
        WHERE id = $7
        RETURNING default_weekly_hours, leave_accrual_per_month,
                  overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
                  primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible,
-                 open_days`,
+                 open_days, pentecost_monday_worked`,
       [defaultWeeklyHours, leaveAccrualPerMonth, overtimeTier1Rate, overtimeTier2Rate,
        overtimeTier2ThresholdHours, primaryColor, companyId, managerInSchedule, meetingsCountAsWork,
-       teamScheduleVisible, openDays]
+       teamScheduleVisible, openDays, pentecostMondayWorked]
     );
 
     if (result.rows.length === 0) {
@@ -68,6 +72,12 @@ const updateSettings = async (req, res) => {
     const accrual = result.rows[0].leave_accrual_per_month;
     if (Number(accrual) !== Number(before.rows[0]?.leave_accrual_per_month)) {
       await recomputeAccruedLeave(companyId, accrual);
+    }
+
+    // Lundi de Pentecôte férié ↔ travaillé : un congé posé ce jour-là
+    // coûte un jour ou non, les jours pris sont donc recalculés
+    if (result.rows[0].pentecost_monday_worked !== before.rows[0]?.pentecost_monday_worked) {
+      await recomputeCompanyUsedLeave(companyId);
     }
 
     res.json({ message: 'Paramètres mis à jour.', settings: result.rows[0] });
