@@ -18,6 +18,7 @@ router.use(auth);
 
 // ── Auto-service pointage (l'employé gère ses propres heures) ──
 // Déclarées avant "/:id" pour ne pas être capturées par ce paramètre.
+router.get   ('/me',                           ctrl.getMe);   // Ma fiche (page « Mon compte »)
 router.get   ('/me/timesheets',                ctrl.getMyTimesheets);
 router.post  ('/me/timesheets',                validate(timesheetSchema), ctrl.addMyTimesheet);
 router.put   ('/me/timesheets/:timesheetId',   validate(updateTimesheetSchema), ctrl.updateMyTimesheet);

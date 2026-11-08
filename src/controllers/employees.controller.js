@@ -95,6 +95,33 @@ const reorderEmployees = async (req, res) => {
 // FICHE DÉTAILLÉE D'UN EMPLOYÉ
 // ─────────────────────────────────────────────
 
+// GET /api/employees/me — l'employé (ou le gérant) lit les informations
+// générales de sa propre fiche, pour la page « Mon compte ». Lecture seule ;
+// le salaire n'est pas renvoyé (choix du 8 nov. 2026).
+const getMe = async (req, res) => {
+  const { id, companyId } = req.user;
+
+  try {
+    const result = await db.query(
+      `SELECT
+         id, first_name, last_name, email, phone,
+         job_title, department, contract_type, work_time, weekly_hours,
+         hire_date, birth_date
+       FROM users
+       WHERE id = $1 AND company_id = $2`,
+      [id, companyId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Compte introuvable.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
 // GET /api/employees/:id
 const getEmployee = async (req, res) => {
   const { companyId } = req.user;
@@ -586,6 +613,7 @@ const getMonthlySummary = async (req, res) => {
 
 module.exports = {
   getEmployees,
+  getMe,
   reorderEmployees,
   getEmployee,
   updateEmployee,
