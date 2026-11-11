@@ -12,6 +12,8 @@ const payrollRoutes  = require('./src/routes/payroll.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const shiftTemplatesRoutes = require('./src/routes/shiftTemplates.routes');
 const weekTemplatesRoutes = require('./src/routes/weekTemplates.routes');
+const visitsRoutes = require('./src/routes/visits.routes');
+const { startVisitsPurge } = require('./src/services/visits.service');
 const presenceRulesRoutes = require('./src/routes/presenceRules.routes');
 const aiPlanningRoutes = require('./src/routes/aiPlanning.routes');
 const meetingsRoutes = require('./src/routes/meetings.routes');
@@ -65,6 +67,7 @@ app.use('/api/payroll',   payrollRoutes);
 app.use('/api/settings',  settingsRoutes);
 app.use('/api/shift-templates', shiftTemplatesRoutes);
 app.use('/api/week-templates', weekTemplatesRoutes);
+app.use('/api/visits', visitsRoutes);
 app.use('/api/presence-rules', presenceRulesRoutes);
 app.use('/api/ai-planning', aiPlanningRoutes);
 app.use('/api/meetings',  meetingsRoutes);
@@ -77,6 +80,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 Sentry.setupExpressErrorHandler(app);
 
 startActivityPurge();
+startVisitsPurge();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur RH démarré sur le port ${PORT}`);

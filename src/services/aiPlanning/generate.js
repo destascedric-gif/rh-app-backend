@@ -283,12 +283,19 @@ const generatePlanning = async (facts, options = {}) => {
 
   const messages = [{ role: 'user', content: intro }];
   const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+  // Compteur partagé avec l'appelant : même si la génération échoue en
+  // route, les jetons déjà dépensés sont connus (pilotage, 11 nov. 2026)
+  if (options.meter) options.meter.usage = usage;
   let result = null;
   let notes = [];
 
   for (let attempt = 0; attempt <= MAX_CORRECTIONS; attempt += 1) {
     const response = await call(messages);
     for (const k of Object.keys(usage)) usage[k] += response.usage?.[k] || 0;
+    if (options.meter) {
+      options.meter.attempts = attempt + 1;
+      options.meter.model = response.model || MODEL;
+    }
 
     if (response.stop_reason === 'refusal') throw new AiPlanningFailedError('L\'IA a refusé de répondre. Réessayez en reformulant vos demandes.');
     if (response.stop_reason === 'max_tokens') throw new AiPlanningFailedError('La réponse de l\'IA était trop longue. Réessayez.');
@@ -332,5 +339,5 @@ const generatePlanning = async (facts, options = {}) => {
 
 module.exports = {
   generatePlanning, buildFactsForAi, toSlots, fakeAiEnabled, AiPlanningUnavailableError, AiPlanningFailedError,
-  SYSTEM_PROMPT, OUTPUT_SCHEMA,
+  SYSTEM_PROMPT, OUTPUT_SCHEMA, estimateCost, MODEL,
 };

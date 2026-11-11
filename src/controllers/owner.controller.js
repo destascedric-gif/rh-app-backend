@@ -277,4 +277,56 @@ const getCompany = async (req, res) => {
   }
 };
 
-module.exports = { setupPassword, getStats, getActivity, getHealth, getCompany };
+// ── Intelligence artificielle : dépenses et crédit (11 nov. 2026) ──
+const aiUsage = require('../services/aiUsage.service');
+const visits = require('../services/visits.service');
+
+// GET /api/owner/ai?days=30
+const getAi = async (req, res) => {
+  const days = PERIODS[req.query.days] ?? 30;
+  try {
+    res.json(await aiUsage.getAiStats(days));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// POST /api/owner/ai/credit — { kind: 'recharge' | 'releve', amount }
+const addAiCredit = async (req, res) => {
+  try {
+    await aiUsage.addCreditEvent(req.body.kind, req.body.amount);
+    res.status(201).json(await aiUsage.getCredit());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// DELETE /api/owner/ai/credit/:id — effacer une saisie erronée
+const deleteAiCredit = async (req, res) => {
+  try {
+    const row = await aiUsage.deleteCreditEvent(req.params.id);
+    if (!row) return res.status(404).json({ message: 'Saisie introuvable.' });
+    res.json(await aiUsage.getCredit());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// ── Visites du site (11 nov. 2026) ──
+// GET /api/owner/visits?days=30
+const getVisits = async (req, res) => {
+  const days = PERIODS[req.query.days] ?? 30;
+  try {
+    res.json(await visits.getVisitStats(days));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+module.exports = {
+  setupPassword, getStats, getActivity, getHealth, getCompany, getAi, addAiCredit, deleteAiCredit, getVisits,
+};

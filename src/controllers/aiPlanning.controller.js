@@ -3,8 +3,9 @@ const db = require('../config/db');
 const { gatherFacts } = require('../services/aiPlanning/facts');
 const { checkPlanning, PROTECTED_TYPES } = require('../services/aiPlanning/rules');
 const {
-  generatePlanning, fakeAiEnabled, AiPlanningUnavailableError, AiPlanningFailedError,
+  generatePlanning, fakeAiEnabled, AiPlanningUnavailableError, AiPlanningFailedError, estimateCost, MODEL,
 } = require('../services/aiPlanning/generate');
+const { recordGeneration, markApplied } = require('../services/aiUsage.service');
 
 // ─────────────────────────────────────────────
 // PLANNING GÉNÉRÉ PAR IA (11 nov. 2026) — règles validées par Cédric :
@@ -107,9 +108,29 @@ const generate = async (req, res) => {
   if (!takeQuota(companyId)) {
     return res.status(429).json({ message: `Limite de ${DAILY_LIMIT} générations par jour atteinte. Réessayez demain.` });
   }
+  // Pilotage : chaque génération est enregistrée (coût, durée, résultat),
+  // réussie ou non ; pas celles de la fausse IA d'essai.
+  const meter = {};
+  const startedAt = Date.now();
+  const record = (status, error) => {
+    if (fakeAiEnabled()) return;
+    recordGeneration({
+      companyId,
+      month: `${year}-${String(month).padStart(2, '0')}`,
+      status,
+      model: meter.model || MODEL,
+      attempts: meter.attempts || 0,
+      usage: meter.usage,
+      costUsd: meter.usage ? estimateCost(meter.usage) : 0,
+      durationMs: Date.now() - startedAt,
+      refinement: Boolean(previous && refinement),
+      error,
+    });
+  };
   try {
     const facts = await gatherFacts(db, companyId, { year, month });
-    const result = await generatePlanning(facts, { mode, requests, previous, refinement });
+    const result = await generatePlanning(facts, { mode, requests, previous, refinement, meter });
+    record('proposee');
     res.json({
       slots: result.slots,
       problems: result.problems,
@@ -119,10 +140,17 @@ const generate = async (req, res) => {
       warnings: facts.habits.warnings,
     });
   } catch (err) {
+    record('echec', err.message);
     if (err instanceof AiPlanningUnavailableError) return res.status(503).json({ message: err.message });
     if (err instanceof AiPlanningFailedError) return res.status(502).json({ message: err.message });
     if (err instanceof Anthropic.RateLimitError) {
       return res.status(503).json({ message: 'L\'IA est très demandée en ce moment. Réessayez dans une minute.' });
+    }
+    // Crédit Anthropic épuisé (recharge automatique désactivée) : message clair
+    // pour le gérant, signalé dans les journaux pour Cédric
+    if (err instanceof Anthropic.APIError && /credit balance/i.test(err.message || '')) {
+      console.error('[planning IA] crédit Anthropic épuisé');
+      return res.status(503).json({ message: 'L\'IA est momentanément indisponible. Réessayez plus tard.' });
     }
     if (err instanceof Anthropic.APIError || err instanceof Anthropic.APIConnectionError) {
       console.error('[planning IA]', err.status, err.message);
@@ -187,6 +215,7 @@ const apply = async (req, res) => {
       counts[s.replaces ? 'replaced' : 'added'] += 1;
     }
     await client.query('COMMIT');
+    markApplied(companyId, `${year}-${String(month).padStart(2, '0')}`);
     res.json(counts);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

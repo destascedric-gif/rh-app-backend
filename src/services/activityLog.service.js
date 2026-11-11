@@ -54,6 +54,7 @@ const ACTION_LABELS = {
   'POST /api/week-templates/': 'a enregistré une semaine type',
   'PUT /api/week-templates/:id': 'a modifié une semaine type',
   'DELETE /api/week-templates/:id': 'a supprimé une semaine type',
+  'POST /api/visits/': null, // compteur de visites : pas dans le journal
   'POST /api/week-templates/apply': 'a rempli une semaine (semaine type ou copie)',
   EMAIL: 'e-mail envoyé',
 };
