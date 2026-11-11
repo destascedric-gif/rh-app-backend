@@ -23,6 +23,10 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 // Postes comparés sans tenir compte des majuscules ni des espaces autour
 const sameTitle = (a, b) => Boolean(a && b) && a.trim().toLowerCase() === b.trim().toLowerCase();
+// « Opticien diplômé ou Opticienne diplômée » ; « A, B ou C »
+const titlesText = (titles) => (titles.length < 2
+  ? titles.join('')
+  : `${titles.slice(0, -1).join(', ')} ou ${titles[titles.length - 1]}`);
 
 const frenchDate = (iso) => new Date(`${iso}T12:00:00Z`)
   .toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
@@ -140,7 +144,8 @@ const checkPlanning = ({ facts, proposal = [] }) => {
     const workers = planning.filter((s) => s.date === d.date && s.type === 'travail');
 
     for (const rule of facts.presenceRules || []) {
-      const ofTitle = workers.filter((s) => sameTitle(people.get(s.userId)?.jobTitle, rule.jobTitle));
+      // Une personne de l'un des postes de la règle suffit
+      const ofTitle = workers.filter((s) => rule.jobTitles.some((t) => sameTitle(people.get(s.userId)?.jobTitle, t)));
       let ok = ofTitle.length >= rule.min;
       // Heures où il manque quelqu'un : « de 12:30 à 13:30 »
       const missing = [];
@@ -157,7 +162,7 @@ const checkPlanning = ({ facts, proposal = [] }) => {
         const when = missing.length
           ? ` (manque ${missing.map(([a, b]) => `de ${fromMin(a)} à ${fromMin(b)}`).join(', ')})`
           : '';
-        add('bloquant', 'regle_presence', `Le ${frenchDate(d.date)} : il faut au moins ${rule.min} ${rule.jobTitle}${rule.when === 'toujours' ? ' à chaque heure d\'ouverture' : ' dans la journée'}${when}.`, { date: d.date });
+        add('bloquant', 'regle_presence', `Le ${frenchDate(d.date)} : il faut au moins ${rule.min} ${titlesText(rule.jobTitles)}${rule.when === 'toujours' ? ' à chaque heure d\'ouverture' : ' dans la journée'}${when}.`, { date: d.date });
       }
     }
 
@@ -171,4 +176,4 @@ const checkPlanning = ({ facts, proposal = [] }) => {
   return { planning, problems, counts };
 };
 
-module.exports = { checkPlanning, frenchDate, PROTECTED_TYPES };
+module.exports = { checkPlanning, frenchDate, titlesText, PROTECTED_TYPES };

@@ -113,9 +113,9 @@ const gatherFacts = async (q, companyId, { year, month }) => {
 
   // Règles de présence par poste fixées par le gérant (Paramètres)
   const presenceRules = (await q.query(
-    'SELECT job_title, min_count, scope FROM presence_rules WHERE company_id = $1 ORDER BY created_at',
+    'SELECT job_titles, min_count, scope FROM presence_rules WHERE company_id = $1 ORDER BY created_at',
     [companyId]
-  )).rows.map((r) => ({ jobTitle: r.job_title.trim(), min: Number(r.min_count), when: r.scope }));
+  )).rows.map((r) => ({ jobTitles: r.job_titles.map((t) => t.trim()), min: Number(r.min_count), when: r.scope }));
 
   const habits = computeHabits({
     employees, history, weeks, holidays, openDays: company.open_days, templates,

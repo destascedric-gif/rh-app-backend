@@ -6,7 +6,13 @@ const db = require('../config/db');
 // par IA et vérifiées par Orgaly (services/aiPlanning/rules.js).
 // ─────────────────────────────────────────────
 
-const COLUMNS = 'id, job_title, min_count, scope, created_at';
+const COLUMNS = 'id, job_titles, min_count, scope, created_at';
+
+// Même liste de postes, sans tenir compte de l'ordre, des majuscules ni des espaces
+const sameTitles = (a, b) => {
+  const norm = (list) => list.map((t) => t.trim().toLowerCase()).sort().join('|');
+  return norm(a) === norm(b);
+};
 
 // Postes remplis dans les fiches des salariés actifs (pour le menu du gérant)
 const readJobTitles = async (companyId) => (await db.query(
@@ -31,20 +37,22 @@ const getPresenceRules = async (req, res) => {
   }
 };
 
-// POST /api/presence-rules — { jobTitle, minCount, scope }
+// POST /api/presence-rules — { jobTitles: [...], minCount, scope }
 const createPresenceRule = async (req, res) => {
   const { companyId } = req.user;
-  const { jobTitle, minCount, scope } = req.body;
+  const { jobTitles, minCount, scope } = req.body;
   try {
-    const duplicate = (await db.query(
-      'SELECT 1 FROM presence_rules WHERE company_id = $1 AND LOWER(TRIM(job_title)) = LOWER($2) AND scope = $3',
-      [companyId, jobTitle, scope]
-    )).rows[0];
-    if (duplicate) return res.status(409).json({ message: 'Une règle existe déjà pour ce poste : supprimez-la pour la remplacer.' });
+    const sameScope = (await db.query(
+      'SELECT job_titles FROM presence_rules WHERE company_id = $1 AND scope = $2',
+      [companyId, scope]
+    )).rows;
+    if (sameScope.some((r) => sameTitles(r.job_titles, jobTitles))) {
+      return res.status(409).json({ message: 'Une règle existe déjà pour ces postes : supprimez-la pour la remplacer.' });
+    }
 
     const result = await db.query(
-      `INSERT INTO presence_rules (company_id, job_title, min_count, scope) VALUES ($1, $2, $3, $4) RETURNING ${COLUMNS}`,
-      [companyId, jobTitle, minCount, scope]
+      `INSERT INTO presence_rules (company_id, job_titles, min_count, scope) VALUES ($1, $2, $3, $4) RETURNING ${COLUMNS}`,
+      [companyId, jobTitles, minCount, scope]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

@@ -11,7 +11,7 @@
 require('dotenv').config();
 const db = require('../src/config/db');
 const { gatherFacts } = require('../src/services/aiPlanning/facts');
-const { checkPlanning, frenchDate } = require('../src/services/aiPlanning/rules');
+const { checkPlanning, frenchDate, titlesText } = require('../src/services/aiPlanning/rules');
 
 const [companyName, yearArg, monthArg] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const asJson = process.argv.includes('--json');
@@ -42,7 +42,7 @@ const LABELS = { travail: 'travaille', repos: 'repos', vide: 'rien de posé', va
     console.log(`Historique étudié : ${h.weeksStudied.length} semaine(s) planifiée(s) (du ${facts.historyRange.start} au ${facts.historyRange.end})`);
     console.log(`Horaires types : ${facts.templates.map((t) => `${t.name} ${t.startTime}-${t.endTime}`).join(' ; ') || 'aucun'}`);
     console.log(`Cases déjà posées dans la période : ${facts.existing.length}`);
-    console.log(`Règles de présence : ${facts.presenceRules.map((r) => `au moins ${r.min} ${r.jobTitle} ${r.when === 'toujours' ? 'à chaque heure d\'ouverture' : 'dans la journée'}`).join(' ; ') || 'aucune'}`);
+    console.log(`Règles de présence : ${facts.presenceRules.map((r) => `au moins ${r.min} ${titlesText(r.jobTitles)} ${r.when === 'toujours' ? 'à chaque heure d\'ouverture' : 'dans la journée'}`).join(' ; ') || 'aucune'}`);
 
     console.log('\n--- Points à signaler au gérant ---');
     if (h.warnings.length === 0) console.log('Aucun.');
