@@ -104,12 +104,17 @@ const computeHabits = ({ employees, history, weeks, holidays, openDays, template
     // Compteur d'écart (niveau 1, informatif) : heures prévues − contrat, semaines habituelles
     const gap = contract != null && hours.length ? hours.reduce((a, h) => a + (h - contract), 0) : null;
 
+    // Grande différence contrat / planning : question au gérant, sauf s'il a
+    // déjà confirmé que la fiche est juste (on suit alors l'habitude).
     let anomaly = null;
+    let contractDiffers = false;
     if (contract != null && hours.length >= 3) {
       const diff = Math.abs(mean - contract);
-      if (diff >= ANOMALY_MIN_HOURS && diff >= ANOMALY_SHARE * contract) {
+      contractDiffers = diff >= ANOMALY_MIN_HOURS && diff >= ANOMALY_SHARE * contract;
+      if (contractDiffers && !e.contractConfirmed) {
         anomaly = {
           code: 'contrat_historique',
+          userId: e.id,
           message: `${e.firstName} : ${contract} h au contrat, mais ${Math.round(mean * 10) / 10} h en moyenne dans le planning. La fiche est-elle juste ?`,
         };
       }
@@ -125,7 +130,9 @@ const computeHabits = ({ employees, history, weeks, holidays, openDays, template
       weekHours,
       unusualWeeks,
       meanHours: mean == null ? null : Math.round(mean * 10) / 10,
-      gapHours: gap == null ? null : Math.round(gap * 10) / 10,
+      // Compteur d'écart sans objet quand le contrat ne reflète pas la réalité (confirmé)
+      gapHours: gap == null || (contractDiffers && e.contractConfirmed) ? null : Math.round(gap * 10) / 10,
+      contractConfirmed: contractDiffers && Boolean(e.contractConfirmed),
       anomaly,
       noHistory: weekHours.length === 0 && unusualWeeks.length === 0,
     };

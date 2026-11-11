@@ -52,7 +52,8 @@ const gatherFacts = async (q, companyId, { year, month }) => {
 
   // Personnes à planifier : salariés actifs, et le gérant s'il figure dans le planning
   const employees = (await q.query(
-    `SELECT id, first_name, role, NULLIF(TRIM(job_title), '') AS job_title, weekly_hours, work_time
+    `SELECT id, first_name, role, NULLIF(TRIM(job_title), '') AS job_title, weekly_hours, work_time,
+            planning_hours_confirmed
      FROM users
      WHERE company_id = $1 AND is_active = TRUE
        AND (role = 'employee' OR ($2 AND role = 'admin'))
@@ -65,6 +66,9 @@ const gatherFacts = async (q, companyId, { year, month }) => {
     weeklyHours: u.weekly_hours == null ? null : Number(u.weekly_hours),
     workTime: u.work_time,
     isManager: u.role === 'admin',
+    // Le gérant a confirmé que ce contrat est juste malgré l'écart avec le planning
+    contractConfirmed: u.planning_hours_confirmed != null && u.weekly_hours != null
+      && Number(u.planning_hours_confirmed) === Number(u.weekly_hours),
   }));
 
   const templates = (await q.query(
