@@ -147,12 +147,15 @@ const deleteWeekTemplate = async (req, res) => {
 // Réponse : { added, replaced, kept, protected, ignored }
 const applyWeekTemplate = async (req, res) => {
   const { companyId, id: adminId } = req.user;
-  const { weekStart, mode, templateId, copyPrevious } = req.body;
+  const { weekStart, mode, templateId, copyPrevious, slots: givenSlots } = req.body;
   if (!isMonday(weekStart)) return res.status(400).json({ message: 'La semaine doit commencer un lundi.' });
 
   let slots;
   try {
-    if (templateId) {
+    if (givenSlots) {
+      // « Annuler » après avoir vidé la semaine : on remet ce qui a été effacé
+      slots = givenSlots;
+    } else if (templateId) {
       const tpl = (await db.query(
         'SELECT slots FROM week_templates WHERE id = $1 AND company_id = $2',
         [templateId, companyId]
@@ -222,6 +225,60 @@ const applyWeekTemplate = async (req, res) => {
   }
 };
 
+// POST /api/week-templates/clear — { weekStart, userIds }
+// Vide la semaine (12 nov. 2026, demande de Cédric) : supprime les créneaux
+// et repos des salariés indiqués (ceux affichés dans le planning). Les
+// congés et absences ne sont jamais effacés. Renvoie ce qui a été effacé,
+// au format des semaines types, pour pouvoir l'annuler.
+const clearWeek = async (req, res) => {
+  const { companyId } = req.user;
+  const { weekStart, userIds } = req.body;
+  if (!isMonday(weekStart)) return res.status(400).json({ message: 'La semaine doit commencer un lundi.' });
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const shifts = (await client.query(
+      `SELECT s.id, s.user_id, s.start_time, s.end_time, COALESCE(s.type, 'travail') AS type,
+              (s.date - $2::date) AS weekday
+       FROM shifts s
+       WHERE s.company_id = $1 AND s.date BETWEEN $2::date AND $3::date
+         AND s.user_id = ANY($4::uuid[])
+         AND COALESCE(s.type, 'travail') IN ('travail', 'repos')
+       FOR UPDATE`,
+      [companyId, weekStart, addDays(weekStart, 6), userIds]
+    )).rows;
+    const ids = shifts.map((s) => s.id);
+    const breaks = ids.length ? (await client.query(
+      'SELECT shift_id, start_time, end_time, label FROM shift_breaks WHERE shift_id = ANY($1) ORDER BY start_time',
+      [ids]
+    )).rows : [];
+    if (ids.length) await client.query('DELETE FROM shifts WHERE id = ANY($1) AND company_id = $2', [ids, companyId]);
+    await client.query('COMMIT');
+
+    res.json({
+      deleted: ids.length,
+      slots: shifts.map((s) => ({
+        userId: s.user_id,
+        weekday: Number(s.weekday),
+        type: s.type,
+        startTime: hhmm(s.start_time),
+        endTime: hhmm(s.end_time),
+        breaks: s.type === 'travail'
+          ? breaks.filter((b) => b.shift_id === s.id)
+            .map((b) => ({ start_time: hhmm(b.start_time), end_time: hhmm(b.end_time), label: b.label || 'Pause' }))
+          : [],
+      })),
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
-  getWeekTemplates, createWeekTemplate, updateWeekTemplate, deleteWeekTemplate, applyWeekTemplate,
+  getWeekTemplates, createWeekTemplate, updateWeekTemplate, deleteWeekTemplate, applyWeekTemplate, clearWeek,
 };
