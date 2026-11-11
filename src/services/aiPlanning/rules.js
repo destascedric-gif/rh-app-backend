@@ -7,7 +7,9 @@
 //           'info' (écart à l'habitude, pour l'aperçu).
 // Fonction pure : aucune lecture de la base ici.
 // ─────────────────────────────────────────────
-const { addDays, toMin, workedMinutes, isPresentAt, formatHours } = require('./time');
+const {
+  addDays, toMin, fromMin, workedMinutes, isPresentAt, formatHours,
+} = require('./time');
 
 const PROTECTED_TYPES = ['conge', 'absence'];
 const MAX_DAY_MIN = 10 * 60;        // 10 h de travail par jour
@@ -18,6 +20,9 @@ const PAUSE_FROM_MIN = 6 * 60;      // pause obligatoire dès 6 h de travail…
 const PAUSE_MIN = 20;               // … d'au moins 20 minutes d'affilée
 const DAY = 24 * 60;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// Postes comparés sans tenir compte des majuscules ni des espaces autour
+const sameTitle = (a, b) => Boolean(a && b) && a.trim().toLowerCase() === b.trim().toLowerCase();
 
 const frenchDate = (iso) => new Date(`${iso}T12:00:00Z`)
   .toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
@@ -135,15 +140,24 @@ const checkPlanning = ({ facts, proposal = [] }) => {
     const workers = planning.filter((s) => s.date === d.date && s.type === 'travail');
 
     for (const rule of facts.presenceRules || []) {
-      const ofTitle = workers.filter((s) => people.get(s.userId)?.jobTitle === rule.jobTitle);
+      const ofTitle = workers.filter((s) => sameTitle(people.get(s.userId)?.jobTitle, rule.jobTitle));
       let ok = ofTitle.length >= rule.min;
+      // Heures où il manque quelqu'un : « de 12:30 à 13:30 »
+      const missing = [];
       if (ok && rule.when === 'toujours' && usual?.usualOpening) {
         for (let m = toMin(usual.usualOpening); m < toMin(usual.usualClosing); m += 15) {
-          if (ofTitle.filter((s) => isPresentAt(s, m)).length < rule.min) { ok = false; break; }
+          if (ofTitle.filter((s) => isPresentAt(s, m)).length >= rule.min) continue;
+          const last = missing[missing.length - 1];
+          if (last && last[1] === m) last[1] = m + 15;
+          else missing.push([m, m + 15]);
         }
+        ok = missing.length === 0;
       }
       if (!ok) {
-        add('bloquant', 'regle_presence', `Le ${frenchDate(d.date)} : il faut au moins ${rule.min} ${rule.jobTitle}${rule.when === 'toujours' ? ' à chaque heure d\'ouverture' : ''}.`, { date: d.date });
+        const when = missing.length
+          ? ` (manque ${missing.map(([a, b]) => `de ${fromMin(a)} à ${fromMin(b)}`).join(', ')})`
+          : '';
+        add('bloquant', 'regle_presence', `Le ${frenchDate(d.date)} : il faut au moins ${rule.min} ${rule.jobTitle}${rule.when === 'toujours' ? ' à chaque heure d\'ouverture' : ' dans la journée'}${when}.`, { date: d.date });
       }
     }
 

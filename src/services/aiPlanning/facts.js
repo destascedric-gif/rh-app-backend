@@ -111,6 +111,12 @@ const gatherFacts = async (q, companyId, { year, month }) => {
   const weeks = [];
   for (let w = historyStart; w <= historyEnd; w = addDays(w, 7)) weeks.push(w);
 
+  // Règles de présence par poste fixées par le gérant (Paramètres)
+  const presenceRules = (await q.query(
+    'SELECT job_title, min_count, scope FROM presence_rules WHERE company_id = $1 ORDER BY created_at',
+    [companyId]
+  )).rows.map((r) => ({ jobTitle: r.job_title.trim(), min: Number(r.min_count), when: r.scope }));
+
   const habits = computeHabits({
     employees, history, weeks, holidays, openDays: company.open_days, templates,
   });
@@ -125,7 +131,7 @@ const gatherFacts = async (q, companyId, { year, month }) => {
     days,
     existing,
     lastDayBefore: history.filter((s) => s.date === historyEnd),
-    presenceRules: [], // règles de présence par poste (Paramètres) : à venir
+    presenceRules,
     habits,
   };
 };

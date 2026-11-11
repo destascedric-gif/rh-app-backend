@@ -42,6 +42,7 @@ const LABELS = { travail: 'travaille', repos: 'repos', vide: 'rien de posé', va
     console.log(`Historique étudié : ${h.weeksStudied.length} semaine(s) planifiée(s) (du ${facts.historyRange.start} au ${facts.historyRange.end})`);
     console.log(`Horaires types : ${facts.templates.map((t) => `${t.name} ${t.startTime}-${t.endTime}`).join(' ; ') || 'aucun'}`);
     console.log(`Cases déjà posées dans la période : ${facts.existing.length}`);
+    console.log(`Règles de présence : ${facts.presenceRules.map((r) => `au moins ${r.min} ${r.jobTitle} ${r.when === 'toujours' ? 'à chaque heure d\'ouverture' : 'dans la journée'}`).join(' ; ') || 'aucune'}`);
 
     console.log('\n--- Points à signaler au gérant ---');
     if (h.warnings.length === 0) console.log('Aucun.');
