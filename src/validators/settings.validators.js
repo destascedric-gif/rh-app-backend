@@ -23,6 +23,10 @@ const updateSettingsSchema = z.object({
   overtimeTier2ThresholdHours: boundedNumber('Le seuil du palier 2', 35, 48,
     'Le seuil du palier 2 doit être d\'au moins 35 h.'),
   managerInSchedule:   z.boolean({ error: 'Valeur invalide.' }).optional(),
+  // Poste du gérant connecté (planning, règles de présence, IA) ; '' = « Gérant »
+  managerJobTitle: z.string({ error: 'Poste invalide.' }).trim()
+    .max(100, 'Poste : 100 caractères maximum.')
+    .optional(),
   meetingsCountAsWork: z.boolean({ error: 'Valeur invalide.' }).optional(),
   teamScheduleVisible: z.boolean({ error: 'Valeur invalide.' }).optional(),
   // Lundi de Pentecôte = journée de solidarité (travaillé) plutôt que férié

@@ -14,10 +14,13 @@ const sameTitles = (a, b) => {
   return norm(a) === norm(b);
 };
 
-// Postes remplis dans les fiches des salariés actifs (pour le menu du gérant)
+// Postes remplis dans les fiches des salariés actifs (pour le menu du gérant),
+// plus celui du gérant s'il figure dans le planning (12 nov. 2026)
 const readJobTitles = async (companyId) => (await db.query(
-  `SELECT DISTINCT TRIM(job_title) AS title FROM users
-   WHERE company_id = $1 AND is_active = TRUE AND role = 'employee' AND NULLIF(TRIM(job_title), '') IS NOT NULL
+  `SELECT DISTINCT TRIM(u.job_title) AS title
+   FROM users u JOIN company c ON c.id = u.company_id
+   WHERE u.company_id = $1 AND u.is_active = TRUE AND NULLIF(TRIM(u.job_title), '') IS NOT NULL
+     AND (u.role = 'employee' OR (u.role = 'admin' AND c.manager_in_schedule))
    ORDER BY 1`,
   [companyId]
 )).rows.map((r) => r.title);

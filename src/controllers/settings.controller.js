@@ -20,7 +20,14 @@ const getSettings = async (req, res) => {
       return res.status(404).json({ message: 'Entreprise introuvable.' });
     }
 
-    res.json(result.rows[0]);
+    // Poste du gérant connecté (12 nov. 2026) : quand il travaille en boutique,
+    // il compte pour les règles de présence (ex. « Opticien diplômé »)
+    const me = (await db.query(
+      "SELECT NULLIF(TRIM(job_title), '') AS job_title FROM users WHERE id = $1 AND company_id = $2",
+      [req.user.id, companyId]
+    )).rows[0];
+
+    res.json({ ...result.rows[0], manager_job_title: me?.job_title ?? '' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -34,7 +41,7 @@ const updateSettings = async (req, res) => {
     defaultWeeklyHours, leaveAccrualPerMonth,
     overtimeTier1Rate, overtimeTier2Rate, overtimeTier2ThresholdHours,
     primaryColor, managerInSchedule, meetingsCountAsWork, teamScheduleVisible, openDays,
-    pentecostMondayWorked, idcc, collectiveAgreement,
+    pentecostMondayWorked, idcc, collectiveAgreement, managerJobTitle,
   } = req.body;
 
   try {
@@ -71,6 +78,14 @@ const updateSettings = async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Entreprise introuvable.' });
+    }
+
+    // Poste du gérant connecté ('' = remis à « Gérant »)
+    if (managerJobTitle !== undefined) {
+      await db.query(
+        "UPDATE users SET job_title = NULLIF($1, ''), updated_at = NOW() WHERE id = $2 AND company_id = $3 AND role = 'admin'",
+        [managerJobTitle, req.user.id, companyId]
+      );
     }
 
     // Nouveau rythme d'acquisition : les soldes déjà calculés suivent
