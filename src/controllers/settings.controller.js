@@ -10,7 +10,8 @@ const getSettings = async (req, res) => {
       `SELECT name, sector, default_weekly_hours, leave_accrual_per_month,
               overtime_tier1_rate, overtime_tier2_rate, overtime_tier2_threshold_hours,
               primary_color, manager_in_schedule, meetings_count_as_work, team_schedule_visible,
-              open_days, pentecost_monday_worked, idcc, collective_agreement
+              open_days, pentecost_monday_worked, idcc, collective_agreement,
+              ai_planning_enabled
        FROM company WHERE id = $1`,
       [companyId]
     );

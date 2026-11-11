@@ -11,6 +11,20 @@ const {
 // Notes/Planning par IA - règles.md
 // ─────────────────────────────────────────────
 
+// Accès à la génération par IA, entreprise par entreprise
+const requireAiAccess = async (req, res, next) => {
+  try {
+    const row = (await db.query('SELECT ai_planning_enabled FROM company WHERE id = $1', [req.user.companyId])).rows[0];
+    if (!row?.ai_planning_enabled) {
+      return res.status(403).json({ message: 'La génération du planning par IA n\'est pas activée pour votre entreprise.' });
+    }
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
 // Mois demandé dans ?year=2027&month=1
 const readMonth = (query) => {
   const year = Number(query.year);
@@ -183,4 +197,6 @@ const apply = async (req, res) => {
   }
 };
 
-module.exports = { getFacts, confirmContract, generate, apply, readMonth };
+module.exports = {
+  requireAiAccess, getFacts, confirmContract, generate, apply, readMonth,
+};

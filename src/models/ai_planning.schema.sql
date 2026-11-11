@@ -10,3 +10,9 @@
 -- correspond plus et la question revient.
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS planning_hours_confirmed NUMERIC(4,2);
+
+-- Accès à la génération par IA, entreprise par entreprise (11 nov. 2026) :
+-- d'abord le compte démo et SAS LLDB (choix de Cédric), plus tard selon
+-- l'abonnement (option payante). Ne se modifie pas depuis l'appli.
+ALTER TABLE company
+  ADD COLUMN IF NOT EXISTS ai_planning_enabled BOOLEAN NOT NULL DEFAULT FALSE;
