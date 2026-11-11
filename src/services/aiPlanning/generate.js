@@ -65,7 +65,8 @@ Consignes :
 - Remplis seulement les couples (salarié, date) de la période qui ne sont pas dans "deja_poses" avec "garder" : une case par salarié et par jour au plus.
 - Mets une case "repos" là où l'habitude du jour est "repos" (le gérant les pose lui-même). Ne mets rien là où l'habitude est "vide".
 - Une habitude "variable" : choisis selon le besoin de la boutique et le rythme des heures.
-- Jour férié ("ferie") un jour d'ouverture : fais comme l'historique ("feries_passes") ; si la boutique n'y a jamais travaillé, ne mets personne, sauf demande du gérant.
+- Le 1er janvier, le 1er mai et le 25 décembre : ne mets personne, sauf demande explicite du gérant (quel que soit l'historique).
+- Autre jour férié ("ferie") un jour d'ouverture : fais comme l'historique ("feries_passes") ; si la boutique n'y a jamais travaillé, ne mets personne, sauf demande du gérant.
 - Le gérant ("est_gerant") se planifie selon ses habitudes, sans objectif d'heures.
 - Heures au format HH:MM (24 h). Les pauses sont dans les horaires de la case. Pour un repos, debut "00:00", fin "23:59", pas de pause.
 - Utilise le code des salariés ("s1", "s2"…) dans "salarie".
@@ -227,7 +228,7 @@ const makeFakeCall = (aiFacts) => async () => {
   for (const p of aiFacts.salaries) {
     for (const d of aiFacts.jours) {
       const h = p.jours.find((x) => x.jour === d.jour);
-      if (!h || !d.ouvert || d.ferie || kept.has(`${p.code}|${d.date}`)) continue;
+      if (!h || !d.ouvert || d.ferie || kept.has(`${p.code}|${d.date}`)) continue; // fausse IA : aucun férié
       if (h.habitude === 'repos') cases.push({ salarie: p.code, date: d.date, type: 'repos', debut: '00:00', fin: '23:59', pauses: [] });
       if (h.habitude !== 'travail') continue;
       const t = aiFacts.horaires_types.find((x) => x.nom === h.horaire_habituel);
