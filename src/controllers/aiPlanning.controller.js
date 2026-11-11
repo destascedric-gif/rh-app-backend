@@ -3,7 +3,7 @@ const db = require('../config/db');
 const { gatherFacts } = require('../services/aiPlanning/facts');
 const { checkPlanning, PROTECTED_TYPES } = require('../services/aiPlanning/rules');
 const {
-  generatePlanning, AiPlanningUnavailableError, AiPlanningFailedError,
+  generatePlanning, fakeAiEnabled, AiPlanningUnavailableError, AiPlanningFailedError,
 } = require('../services/aiPlanning/generate');
 
 // ─────────────────────────────────────────────
@@ -87,7 +87,7 @@ const takeQuota = (companyId) => {
 const generate = async (req, res) => {
   const { companyId } = req.user;
   const { year, month, mode, requests, previous, refinement } = req.body;
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY && !fakeAiEnabled()) {
     return res.status(503).json({ message: 'La génération par IA n\'est pas encore activée.' });
   }
   if (!takeQuota(companyId)) {

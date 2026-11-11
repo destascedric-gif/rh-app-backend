@@ -218,6 +218,42 @@ const callClaude = async (messages) => {
   return stream.finalMessage();
 };
 
+// Mode d'essai SANS IA (serveur d'essai seulement : AI_PLANNING_FAKE=1 et pas
+// de clé Anthropic) : recopie les habitudes, pour tester l'écran sans dépense.
+const fakeAiEnabled = () => process.env.AI_PLANNING_FAKE === '1' && !process.env.ANTHROPIC_API_KEY;
+const makeFakeCall = (aiFacts) => async () => {
+  const kept = new Set(aiFacts.deja_poses.filter((s) => s.garder).map((s) => `${s.salarie}|${s.date}`));
+  const cases = [];
+  for (const p of aiFacts.salaries) {
+    for (const d of aiFacts.jours) {
+      const h = p.jours.find((x) => x.jour === d.jour);
+      if (!h || !d.ouvert || d.ferie || kept.has(`${p.code}|${d.date}`)) continue;
+      if (h.habitude === 'repos') cases.push({ salarie: p.code, date: d.date, type: 'repos', debut: '00:00', fin: '23:59', pauses: [] });
+      if (h.habitude !== 'travail') continue;
+      const t = aiFacts.horaires_types.find((x) => x.nom === h.horaire_habituel);
+      if (t) {
+        cases.push({
+          salarie: p.code, date: d.date, type: 'travail', debut: t.debut, fin: t.fin,
+          pauses: t.pause ? [{ debut: t.pause.split('-')[0], fin: t.pause.split('-')[1] }] : [],
+        });
+      } else if (/^\d\d:\d\d-\d\d:\d\d$/.test(h.horaire_habituel || '')) {
+        // Horaire saisi à la main : pause d'1 h au milieu, seulement dès 6 h de présence
+        const [debut, fin] = h.horaire_habituel.split('-');
+        const toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+        const toT = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+        const mid = Math.round((toM(debut) + toM(fin)) / 2 / 15) * 15;
+        const pauses = toM(fin) - toM(debut) >= 6 * 60 ? [{ debut: toT(mid - 30), fin: toT(mid + 30) }] : [];
+        cases.push({ salarie: p.code, date: d.date, type: 'travail', debut, fin, pauses });
+      }
+    }
+  }
+  return {
+    stop_reason: 'end_turn',
+    content: [{ type: 'text', text: JSON.stringify({ cases, notes: ['Essai sans IA : planning recopié des habitudes, les demandes ne sont pas prises en compte.'] }) }],
+    usage: { input_tokens: 0, output_tokens: 0 },
+  };
+};
+
 /**
  * Génère une proposition de planning pour le mois.
  * @param {object} facts     résultat de gatherFacts
@@ -226,8 +262,8 @@ const callClaude = async (messages) => {
  */
 const generatePlanning = async (facts, options = {}) => {
   const mode = options.mode === 'replace' ? 'replace' : 'empty';
-  const call = options.call || callClaude;
   const aiFacts = buildFactsForAi(facts, { mode, requests: options.requests });
+  const call = options.call || (fakeAiEnabled() ? makeFakeCall(aiFacts) : callClaude);
   const userOfCode = new Map([...aiFacts._codes].map(([id, code]) => [code, id]));
   delete aiFacts._codes;
 
@@ -294,6 +330,6 @@ const generatePlanning = async (facts, options = {}) => {
 };
 
 module.exports = {
-  generatePlanning, buildFactsForAi, toSlots, AiPlanningUnavailableError, AiPlanningFailedError,
+  generatePlanning, buildFactsForAi, toSlots, fakeAiEnabled, AiPlanningUnavailableError, AiPlanningFailedError,
   SYSTEM_PROMPT, OUTPUT_SCHEMA,
 };
