@@ -11,6 +11,7 @@ const scheduleRoutes = require('./src/routes/schedule.routes');
 const payrollRoutes  = require('./src/routes/payroll.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const shiftTemplatesRoutes = require('./src/routes/shiftTemplates.routes');
+const weekTemplatesRoutes = require('./src/routes/weekTemplates.routes');
 const meetingsRoutes = require('./src/routes/meetings.routes');
 const ownerRoutes    = require('./src/routes/owner.routes');
 const { activityMiddleware, startActivityPurge } = require('./src/services/activityLog.service');
@@ -60,6 +61,7 @@ app.use('/api/schedule',  scheduleRoutes);
 app.use('/api/payroll',   payrollRoutes);
 app.use('/api/settings',  settingsRoutes);
 app.use('/api/shift-templates', shiftTemplatesRoutes);
+app.use('/api/week-templates', weekTemplatesRoutes);
 app.use('/api/meetings',  meetingsRoutes);
 app.use('/api/owner',     ownerRoutes);
 

@@ -51,6 +51,10 @@ const ACTION_LABELS = {
   'POST /api/shift-templates/': 'a créé un horaire type',
   'PUT /api/shift-templates/:id': 'a modifié un horaire type',
   'DELETE /api/shift-templates/:id': 'a supprimé un horaire type',
+  'POST /api/week-templates/': 'a enregistré une semaine type',
+  'PUT /api/week-templates/:id': 'a modifié une semaine type',
+  'DELETE /api/week-templates/:id': 'a supprimé une semaine type',
+  'POST /api/week-templates/apply': 'a rempli une semaine (semaine type ou copie)',
   EMAIL: 'e-mail envoyé',
 };
 
