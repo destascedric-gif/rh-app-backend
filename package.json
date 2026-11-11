@@ -11,6 +11,7 @@
     "planning-ia": "node scripts/planning-ia-faits.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@sentry/node": "^10.73.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

@@ -51,7 +51,8 @@ app.use(cors({
 // donc déclaré avant express.json().
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), billingCtrl.handleWebhook);
 
-app.use(express.json());
+// 1 Mo : un planning d'un mois proposé par l'IA peut dépasser les 100 ko par défaut
+app.use(express.json({ limit: '1mb' }));
 // Journal des actions et temps de réponse (page de pilotage)
 app.use(activityMiddleware);
 

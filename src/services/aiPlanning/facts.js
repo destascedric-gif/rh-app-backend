@@ -115,6 +115,16 @@ const gatherFacts = async (q, companyId, { year, month }) => {
   const weeks = [];
   for (let w = historyStart; w <= historyEnd; w = addDays(w, 7)) weeks.push(w);
 
+  // Jours fériés de l'historique tombés un jour d'ouverture : la boutique
+  // a-t-elle travaillé ? (l'IA fait de même pour les fériés à venir)
+  const holidayHistory = [];
+  for (let d = historyStart; d <= historyEnd; d = addDays(d, 1)) {
+    if (!holidays.has(d) || company.open_days[weekdayOf(d)] !== '1') continue;
+    const planned = history.some((s) => s.date >= mondayOf(d) && s.date <= addDays(mondayOf(d), 6));
+    if (!planned) continue;
+    holidayHistory.push({ date: d, workers: history.filter((s) => s.date === d && s.type === 'travail').length });
+  }
+
   // Règles de présence par poste fixées par le gérant (Paramètres)
   const presenceRules = (await q.query(
     'SELECT job_titles, min_count, scope FROM presence_rules WHERE company_id = $1 ORDER BY created_at',
@@ -135,6 +145,7 @@ const gatherFacts = async (q, companyId, { year, month }) => {
     days,
     existing,
     lastDayBefore: history.filter((s) => s.date === historyEnd),
+    holidayHistory,
     presenceRules,
     habits,
   };
