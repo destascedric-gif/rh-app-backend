@@ -15,6 +15,7 @@ router.post('/setup', authLimiter, validate(ownerSetupSchema), ctrl.setupPasswor
 router.get('/stats', auth, isOwner, ctrl.getStats);
 router.get('/activity', auth, isOwner, ctrl.getActivity);
 router.get('/health', auth, isOwner, ctrl.getHealth);
+router.get('/health/history', auth, isOwner, ctrl.getHealthHistory);
 router.get('/companies/:id', auth, isOwner, ctrl.getCompany);
 // Intelligence artificielle (dépenses, crédit estimé) et visites du site
 router.get('/ai', auth, isOwner, ctrl.getAi);

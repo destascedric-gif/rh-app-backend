@@ -101,36 +101,9 @@ const logActivity = ({ companyId = null, userId = null, role = null, action, sta
   ).catch((err) => console.error('Journal des actions :', err.message));
 };
 
-// ── Temps de réponse : compteurs en mémoire, par minute, sur 24 h ──────
-// (remis à zéro au redémarrage du serveur, suffisant pour une tendance)
-const minuteStats = new Map(); // minute (ms) -> { count, totalMs }
-const recordTiming = (ms) => {
-  const minute = Math.floor(Date.now() / 60000) * 60000;
-  const s = minuteStats.get(minute) ?? { count: 0, totalMs: 0 };
-  s.count += 1;
-  s.totalMs += ms;
-  minuteStats.set(minute, s);
-  const oldest = Date.now() - 24 * 3600 * 1000;
-  for (const key of minuteStats.keys()) {
-    if (key < oldest) minuteStats.delete(key); else break;
-  }
-};
-// Courbe heure par heure sur 24 h : nombre de requêtes et temps moyen
-const getTimingSeries = () => {
-  const hourNow = Math.floor(Date.now() / 3600000) * 3600000;
-  const buckets = [];
-  for (let i = 23; i >= 0; i -= 1) buckets.push({ hour: new Date(hourNow - i * 3600000).toISOString(), count: 0, totalMs: 0 });
-  for (const [minute, s] of minuteStats) {
-    const idx = 23 - Math.floor((hourNow - Math.floor(minute / 3600000) * 3600000) / 3600000);
-    if (idx >= 0 && idx < 24) { buckets[idx].count += s.count; buckets[idx].totalMs += s.totalMs; }
-  }
-  return buckets.map((b) => ({ hour: b.hour, count: b.count, avg_ms: b.count ? Math.round(b.totalMs / b.count) : null }));
-};
-const getTimingStats = () => {
-  let count = 0, totalMs = 0;
-  for (const s of minuteStats.values()) { count += s.count; totalMs += s.totalMs; }
-  return { requests: count, avgMs: count ? Math.round(totalMs / count) : null };
-};
+// Temps de réponse et erreurs : historique heure par heure en base
+// (healthHistory.service.js)
+const { recordRequest } = require('./healthHistory.service');
 
 // ── Middleware : à monter avant les routes ─────────────────────────────
 // Journalise les actions qui modifient quelque chose (et toute erreur
@@ -142,7 +115,7 @@ const activityMiddleware = (req, res, next) => {
   res.on('finish', () => {
     const durationMs = Number((process.hrtime.bigint() - start) / 1000000n);
     if (req.originalUrl.startsWith('/api/health')) return;
-    recordTiming(durationMs);
+    recordRequest(durationMs, res.statusCode);
 
     if (!req.route) return; // aucune route trouvée (404)
     const action = `${req.method} ${req.baseUrl}${req.route.path}`;
@@ -177,5 +150,5 @@ const startActivityPurge = () => {
 };
 
 module.exports = {
-  RETENTION_DAYS, labelOf, logActivity, activityMiddleware, startActivityPurge, getTimingStats, getTimingSeries,
+  RETENTION_DAYS, labelOf, logActivity, activityMiddleware, startActivityPurge,
 };

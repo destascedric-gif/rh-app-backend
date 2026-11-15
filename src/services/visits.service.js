@@ -46,18 +46,41 @@ const sourceOf = (src, ref) => {
 const parisDay = () => new Date().toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' }); // AAAA-MM-JJ
 const SECRET = process.env.JWT_SECRET || 'orgaly-visites';
 
+const userAgentOf = (req) => String(req.get('user-agent') || '').slice(0, 400);
+// Empreinte du jour d'un appareil (IP + navigateur, secret du jour)
+const visitorOf = (req) => {
+  const daySecret = crypto.createHmac('sha256', SECRET).update(`visites|${parisDay()}`).digest();
+  return crypto.createHmac('sha256', daySecret).update(`${req.ip}|${userAgentOf(req)}`).digest('hex').slice(0, 16);
+};
+
+// Retire les visites du jour de l'appareil qui fait la requête (15 nov.
+// 2026) : appelé quand quelqu'un se connecte (une personne qui a un compte
+// n'est pas un visiteur à convaincre) et par la page /ne-pas-compter.
+// Les pages d'inscription sont gardées (elles mesurent les inscriptions).
+const forgetTodayVisits = (req) => db.query(
+  `DELETE FROM site_visits
+   WHERE visitor = $1 AND path NOT LIKE '/setup/%'
+     AND created_at >= (date_trunc('day', NOW() AT TIME ZONE 'Europe/Paris') AT TIME ZONE 'Europe/Paris')`,
+  [visitorOf(req)]
+).catch((err) => console.error('Visites (oubli) :', err.message));
+
+// POST /api/visits/forget — page « Ne pas compter cet appareil »
+const forgetVisits = async (req, res) => {
+  await forgetTodayVisits(req);
+  res.status(204).end();
+};
+
 // POST /api/visits — { path, ref, src } ; répond tout de suite, sans contenu
 const trackVisit = async (req, res) => {
   res.status(204).end();
   try {
-    const ua = String(req.get('user-agent') || '').slice(0, 400);
+    const ua = userAgentOf(req);
     if (!ua || BOT_RE.test(ua)) return;
     const path = typeof req.body?.path === 'string' ? req.body.path : '';
     if (!PUBLIC_PATHS.has(path)) return;
     const source = sourceOf(req.body.src, req.body.ref);
     const device = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ? 'telephone' : 'ordinateur';
-    const daySecret = crypto.createHmac('sha256', SECRET).update(`visites|${parisDay()}`).digest();
-    const visitor = crypto.createHmac('sha256', daySecret).update(`${req.ip}|${ua}`).digest('hex').slice(0, 16);
+    const visitor = visitorOf(req);
     await db.query(
       'INSERT INTO site_visits (path, source, device, visitor) VALUES ($1, $2, $3, $4)',
       [path, source, device, visitor]
@@ -141,4 +164,4 @@ const getVisitStats = async (days) => {
   };
 };
 
-module.exports = { trackVisit, startVisitsPurge, getVisitStats, sourceOf, PUBLIC_PATHS };
+module.exports = { trackVisit, forgetVisits, forgetTodayVisits, startVisitsPurge, getVisitStats, sourceOf, PUBLIC_PATHS };

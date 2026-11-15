@@ -1,6 +1,6 @@
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
-const { trackVisit } = require('../services/visits.service');
+const { trackVisit, forgetVisits } = require('../services/visits.service');
 
 const router = express.Router();
 
@@ -15,5 +15,7 @@ const visitsLimiter = rateLimit({
 });
 
 router.post('/', visitsLimiter, trackVisit);
+// « Ne pas compter cet appareil » : retire ses visites du jour
+router.post('/forget', visitsLimiter, forgetVisits);
 
 module.exports = router;

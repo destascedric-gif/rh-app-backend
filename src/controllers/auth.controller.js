@@ -6,6 +6,7 @@ const { sendMail, FRONTEND_URL } = require('../config/mailer');
 const { CGU_VERSION } = require('../config/legal');
 const { syncSubscriptionQuantity } = require('../services/billing.service');
 const { DEFAULT_LEAVE_ACCRUAL } = require('../services/leaves.service');
+const { forgetTodayVisits } = require('../services/visits.service');
 
 // ─────────────────────────────────────────────
 // UTILITAIRES
@@ -178,6 +179,7 @@ const login = async (req, res) => {
       if (owner && await bcrypt.compare(password, owner.password_hash)) {
         await db.query('UPDATE platform_owners SET last_login_at = NOW() WHERE id = $1', [owner.id]);
         res.locals.actor = { role: 'owner' }; // non journalisé
+        forgetTodayVisits(req); // ses visites du jour ne comptent pas
         return res.json({
           token: generateToken({ id: owner.id, email: owner.email, role: 'owner', company_id: null }),
           user: { id: owner.id, firstName: owner.name, lastName: '', email: owner.email, role: 'owner', companyId: null },
@@ -200,6 +202,10 @@ const login = async (req, res) => {
     if (!passwordMatch) {
       return res.status(401).json({ message: 'Identifiants incorrects.' });
     }
+
+    // Une personne qui a un compte n'est pas un visiteur à convaincre :
+    // ses visites du jour sur les pages publiques sont retirées du compteur
+    forgetTodayVisits(req);
 
     const token = generateToken(user);
 

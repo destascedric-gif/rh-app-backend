@@ -16,7 +16,8 @@ const withPrice = (c) => {
     billing_state: c.free_forever ? 'offert' : price.monthly === 0 ? 'gratuit' : inTrial ? 'essai' : 'payant',
   };
 };
-const { labelOf, getTimingStats, getTimingSeries, RETENTION_DAYS } = require('../services/activityLog.service');
+const { labelOf, RETENTION_DAYS } = require('../services/activityLog.service');
+const { getLast24h, getDailyHistory } = require('../services/healthHistory.service');
 
 // ─────────────────────────────────────────────
 // PAGE DE PILOTAGE — réservée au propriétaire d'Orgaly
@@ -218,7 +219,7 @@ const getHealth = async (req, res) => {
          max(created_at) FILTER (WHERE status = 'error' AND action <> 'EMAIL') AS last_error_at
        FROM activity_log`
     )).rows[0];
-    const timing = getTimingStats();
+    const timing = await getLast24h();
     res.json({
       online: true,
       uptime_s: Math.round(process.uptime()),
@@ -229,8 +230,19 @@ const getHealth = async (req, res) => {
       emails_today: counts.emails_today,
       email_errors_24h: counts.email_errors_24h,
       email_daily_limit: 300,
-      series: getTimingSeries(),
+      series: timing.series,
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// GET /api/owner/health/history?days=7|30|90 — historique jour par jour
+const getHealthHistory = async (req, res) => {
+  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  try {
+    res.json(await getDailyHistory(days));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -358,5 +370,5 @@ const getVisits = async (req, res) => {
 };
 
 module.exports = {
-  setupPassword, getStats, getActivity, getHealth, getCompany, getAi, addAiCredit, deleteAiCredit, getVisits,
+  setupPassword, getStats, getActivity, getHealth, getHealthHistory, getCompany, getAi, addAiCredit, deleteAiCredit, getVisits,
 };

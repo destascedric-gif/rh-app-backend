@@ -14,6 +14,7 @@ const shiftTemplatesRoutes = require('./src/routes/shiftTemplates.routes');
 const weekTemplatesRoutes = require('./src/routes/weekTemplates.routes');
 const visitsRoutes = require('./src/routes/visits.routes');
 const { startVisitsPurge } = require('./src/services/visits.service');
+const { startHealthHistory } = require('./src/services/healthHistory.service');
 const presenceRulesRoutes = require('./src/routes/presenceRules.routes');
 const aiPlanningRoutes = require('./src/routes/aiPlanning.routes');
 const meetingsRoutes = require('./src/routes/meetings.routes');
@@ -81,6 +82,7 @@ Sentry.setupExpressErrorHandler(app);
 
 startActivityPurge();
 startVisitsPurge();
+startHealthHistory();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur RH démarré sur le port ${PORT}`);
