@@ -113,6 +113,11 @@ const getStats = async (req, res) => {
                    WHERE u.company_id = c.id AND u.role = 'employee' AND u.is_active)::int AS employees,
                 (SELECT count(*) FROM shifts s
                    WHERE s.company_id = c.id AND s.created_at >= NOW() - interval '30 days')::int AS shifts_30d,
+                -- Mois de planning créés : mois qui ont au moins un créneau de travail
+                (SELECT count(DISTINCT date_trunc('month', s.date)) FROM shifts s
+                   WHERE s.company_id = c.id AND COALESCE(s.type, 'travail') = 'travail')::int AS planning_months,
+                (SELECT to_char(max(s.date), 'YYYY-MM-DD') FROM shifts s
+                   WHERE s.company_id = c.id AND COALESCE(s.type, 'travail') = 'travail') AS planning_until,
                 GREATEST(
                   (SELECT max(s.updated_at) FROM shifts s WHERE s.company_id = c.id),
                   (SELECT max(l.updated_at) FROM leave_requests l WHERE l.company_id = c.id),
@@ -166,9 +171,14 @@ const getActivity = async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT a.id, a.created_at, a.action, a.status, a.http_status, a.actor_role, c.name AS company
+      // Auteur : prénom et initiale du nom seulement (minimisation des
+      // données ; mentionné dans la politique de confidentialité, 15 nov. 2026)
+      `SELECT a.id, a.created_at, a.action, a.status, a.http_status, a.actor_role, c.name AS company,
+              CASE WHEN u.id IS NULL THEN NULL
+                   ELSE trim(concat(initcap(u.first_name), ' ', NULLIF(upper(left(u.last_name, 1)), '') || '.')) END AS actor
        FROM activity_log a
        LEFT JOIN company c ON c.id = a.company_id
+       LEFT JOIN users u ON u.id = a.user_id
        WHERE a.action <> 'EMAIL'
          AND (a.company_id IS NULL OR a.company_id NOT IN ${DEMO_COMPANIES})${filters}
        ORDER BY a.created_at DESC
@@ -182,6 +192,7 @@ const getActivity = async (req, res) => {
         created_at: r.created_at,
         company: r.company,
         role: ROLE_LABELS[r.actor_role] ?? null,
+        actor: r.actor || null,
         label: labelOf(r.action, r.status),
         status: r.status,
         http_status: r.http_status,
@@ -242,6 +253,8 @@ const getCompany = async (req, res) => {
               (SELECT count(*) FROM users u WHERE u.company_id = c.id AND u.role = 'employee' AND NOT u.is_active)::int AS inactive_employees,
               (SELECT count(*) FROM users u WHERE u.company_id = c.id AND u.role = 'admin')::int AS managers,
               (SELECT count(*) FROM shifts s WHERE s.company_id = c.id AND s.created_at >= NOW() - interval '30 days')::int AS shifts_30d,
+              (SELECT count(DISTINCT date_trunc('month', s.date)) FROM shifts s WHERE s.company_id = c.id AND COALESCE(s.type, 'travail') = 'travail')::int AS planning_months,
+              (SELECT to_char(max(s.date), 'YYYY-MM-DD') FROM shifts s WHERE s.company_id = c.id AND COALESCE(s.type, 'travail') = 'travail') AS planning_until,
               (SELECT count(*) FROM leave_requests l WHERE l.company_id = c.id AND l.created_at >= NOW() - interval '30 days')::int AS leaves_30d,
               (SELECT count(*) FROM timesheets t WHERE t.company_id = c.id AND t.created_at >= NOW() - interval '30 days')::int AS timesheets_30d,
               (SELECT count(*) FROM payslips p WHERE p.company_id = c.id AND p.created_at >= NOW() - interval '30 days')::int AS payslips_30d,

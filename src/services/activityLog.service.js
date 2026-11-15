@@ -20,6 +20,11 @@ const ACTION_LABELS = {
   'POST /api/auth/invite': 'a invité un salarié',
   'POST /api/auth/invite/:id/resend': 'a renvoyé une invitation',
   'POST /api/auth/accept-invite': 'a accepté son invitation',
+  'POST /api/auth/forgot-password': 'a demandé un lien « mot de passe oublié »',
+  'POST /api/auth/reset-password': 'a choisi un nouveau mot de passe (mot de passe oublié)',
+  'POST /api/ai-planning/generate': "a généré un planning avec l'IA",
+  'POST /api/ai-planning/apply': "a appliqué au planning la proposition de l'IA",
+  'POST /api/ai-planning/confirm-contract': "a confirmé la fiche d'un salarié (planning par IA)",
   'POST /api/billing/checkout': 'a ouvert le paiement de la formule Pro',
   'POST /api/billing/portal': "a ouvert la gestion de l'abonnement",
   'POST /api/employees/me/timesheets': 'a pointé',
@@ -40,6 +45,9 @@ const ACTION_LABELS = {
   'POST /api/meetings/': 'a créé une réunion',
   'PUT /api/meetings/:id': 'a modifié une réunion',
   'DELETE /api/meetings/:id': 'a supprimé une réunion',
+  'PATCH /api/meetings/notifications/read-all': null,
+  'POST /api/presence-rules/': 'a ajouté une règle de présence',
+  'DELETE /api/presence-rules/:id': 'a supprimé une règle de présence',
   'POST /api/owner/setup': null,
   'POST /api/payroll/generate': 'a généré un bulletin de paie',
   'POST /api/payroll/generate-all': 'a généré les bulletins du mois',
@@ -63,10 +71,17 @@ const ACTION_LABELS = {
 // Libellés différents quand l'action a été refusée
 const REFUSED_LABELS = {
   'POST /api/auth/login': 'connexion refusée',
+  'POST /api/ai-planning/generate': "génération par l'IA refusée (limite du mois atteinte ou génération déjà en cours)",
+  'POST /api/ai-planning/apply': "proposition de l'IA refusée à l'application (règle non respectée)",
+};
+// … et quand elle a échoué (erreur du serveur ou de l'IA)
+const ERROR_LABELS = {
+  'POST /api/ai-planning/generate': "génération par l'IA échouée (l'IA n'a pas répondu ou crédit épuisé)",
 };
 
 const labelOf = (action, status) => {
   if (status === 'refused' && REFUSED_LABELS[action]) return REFUSED_LABELS[action];
+  if (status === 'error' && ERROR_LABELS[action]) return ERROR_LABELS[action];
   if (Object.prototype.hasOwnProperty.call(ACTION_LABELS, action) && ACTION_LABELS[action]) {
     return ACTION_LABELS[action];
   }
