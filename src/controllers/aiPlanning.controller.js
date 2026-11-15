@@ -5,7 +5,8 @@ const { checkPlanning, PROTECTED_TYPES } = require('../services/aiPlanning/rules
 const {
   generatePlanning, fakeAiEnabled, AiPlanningUnavailableError, AiPlanningFailedError, estimateCost, MODEL,
 } = require('../services/aiPlanning/generate');
-const { recordGeneration, markApplied } = require('../services/aiUsage.service');
+const { recordGeneration, markApplied, countMonthGenerations } = require('../services/aiUsage.service');
+const { AI_MONTHLY_GENERATIONS } = require('../services/billing.service');
 
 // ─────────────────────────────────────────────
 // PLANNING GÉNÉRÉ PAR IA (11 nov. 2026) — règles validées par Cédric :
@@ -84,17 +85,25 @@ const confirmContract = async (req, res) => {
   }
 };
 
-// Garde-fou de coût : générations par entreprise et par jour (en mémoire,
-// remis à zéro au redémarrage du serveur)
-const DAILY_LIMIT = Number(process.env.AI_PLANNING_DAILY_LIMIT) || 15;
-const usageToday = new Map(); // companyId → { day, count }
-const takeQuota = (companyId) => {
-  const day = new Date().toISOString().slice(0, 10);
-  const u = usageToday.get(companyId);
-  const count = u && u.day === day ? u.count : 0;
-  if (count >= DAILY_LIMIT) return false;
-  usageToday.set(companyId, { day, count: count + 1 });
-  return true;
+// Limite de l'option IA (15 nov. 2026) : 10 générations réussies par
+// entreprise et par mois calendaire, comptées dans ai_generations.
+// Une seule génération à la fois par entreprise (sinon deux clics
+// rapprochés pourraient dépasser la limite).
+const inProgress = new Set(); // companyId
+
+const usageOf = async (companyId) => {
+  const used = await countMonthGenerations(companyId);
+  return { used, limit: AI_MONTHLY_GENERATIONS, remaining: Math.max(0, AI_MONTHLY_GENERATIONS - used) };
+};
+
+// GET /api/ai-planning/usage — générations utilisées ce mois-ci
+const getUsage = async (req, res) => {
+  try {
+    res.json(await usageOf(req.user.companyId));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
 };
 
 // POST /api/ai-planning/generate — { year, month, mode, requests, previous?, refinement? }
@@ -105,16 +114,38 @@ const generate = async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY && !fakeAiEnabled()) {
     return res.status(503).json({ message: 'La génération par IA n\'est pas encore activée.' });
   }
-  if (!takeQuota(companyId)) {
-    return res.status(429).json({ message: `Limite de ${DAILY_LIMIT} générations par jour atteinte. Réessayez demain.` });
+  if (inProgress.has(companyId)) {
+    return res.status(429).json({ message: 'Une génération est déjà en cours. Attendez qu\'elle se termine.' });
   }
+  inProgress.add(companyId);
+  try {
+    const usage = await usageOf(companyId);
+    if (usage.remaining <= 0) {
+      return res.status(429).json({
+        message: `Les ${usage.limit} générations de ce mois-ci ont été utilisées. Elles seront de nouveau disponibles le 1er du mois prochain.`,
+        code: 'AI_MONTHLY_LIMIT',
+        usage,
+      });
+    }
+    await runGeneration(req, res, usage);
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ message: 'Erreur serveur.' });
+  } finally {
+    inProgress.delete(companyId);
+  }
+};
+
+const runGeneration = async (req, res, usage) => {
+  const { companyId } = req.user;
+  const { year, month, mode, requests, previous, refinement } = req.body;
   // Pilotage : chaque génération est enregistrée (coût, durée, résultat),
   // réussie ou non ; pas celles de la fausse IA d'essai.
   const meter = {};
   const startedAt = Date.now();
   const record = (status, error) => {
-    if (fakeAiEnabled()) return;
-    recordGeneration({
+    if (fakeAiEnabled()) return null;
+    return recordGeneration({
       companyId,
       month: `${year}-${String(month).padStart(2, '0')}`,
       status,
@@ -130,8 +161,10 @@ const generate = async (req, res) => {
   try {
     const facts = await gatherFacts(db, companyId, { year, month });
     const result = await generatePlanning(facts, { mode, requests, previous, refinement, meter });
-    record('proposee');
+    await record('proposee');
+    const used = usage.used + (fakeAiEnabled() ? 0 : 1);
     res.json({
+      usage: { used, limit: usage.limit, remaining: Math.max(0, usage.limit - used) },
       slots: result.slots,
       problems: result.problems,
       counts: result.counts,
@@ -227,5 +260,5 @@ const apply = async (req, res) => {
 };
 
 module.exports = {
-  requireAiAccess, getFacts, confirmContract, generate, apply, readMonth,
+  requireAiAccess, getFacts, getUsage, confirmContract, generate, apply, readMonth,
 };

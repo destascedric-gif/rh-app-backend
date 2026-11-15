@@ -11,6 +11,7 @@ const ctrl     = require('../controllers/aiPlanning.controller');
 router.use(auth, isAdmin, ctrl.requireAiAccess);
 
 router.get ('/facts',            ctrl.getFacts);
+router.get ('/usage',            ctrl.getUsage);                             // générations utilisées ce mois-ci
 router.post('/confirm-contract', validate(confirmContractSchema), ctrl.confirmContract);
 router.post('/generate',         validate(generateSchema), ctrl.generate);   // proposition, rien n'est écrit
 router.post('/apply',            validate(applySchema), ctrl.apply);         // écrit la proposition validée

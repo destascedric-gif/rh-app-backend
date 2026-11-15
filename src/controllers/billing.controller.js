@@ -3,11 +3,12 @@ const stripe = require('../config/stripe');
 const { FRONTEND_URL } = require('../config/mailer');
 const { CGV_VERSION }  = require('../config/legal');
 const {
-  FREE_EMPLOYEE_LIMIT,
-  PRO_PRICE_PER_EMPLOYEE,
+  PRICING,
+  computePrice,
   countActiveEmployees,
   applySubscription,
 } = require('../services/billing.service');
+const { countMonthGenerations } = require('../services/aiUsage.service');
 
 const billingDisabled = (res) =>
   res.status(503).json({ message: 'La facturation en ligne n\'est pas encore disponible.' });
@@ -19,22 +20,30 @@ const getBilling = async (req, res) => {
   try {
     const result = await db.query(
       `SELECT plan, subscription_status, current_period_end, cancel_at_period_end,
-              stripe_customer_id
+              stripe_customer_id, free_forever, ai_planning_enabled,
+              created_at + make_interval(months => $2) AS trial_ends_at
        FROM company WHERE id = $1`,
-      [companyId]
+      [companyId, PRICING.trialMonths]
     );
     const company = result.rows[0];
     if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
 
+    const activeEmployees = await countActiveEmployees(companyId);
+    const trialEndsAt = company.trial_ends_at;
     res.json({
       plan:                company.plan,
       subscriptionStatus:  company.subscription_status,
       currentPeriodEnd:    company.current_period_end,
       cancelAtPeriodEnd:   company.cancel_at_period_end,
       hasBillingAccount:   Boolean(company.stripe_customer_id),
-      activeEmployees:     await countActiveEmployees(companyId),
-      freeEmployeeLimit:   FREE_EMPLOYEE_LIMIT,
-      pricePerEmployee:    PRO_PRICE_PER_EMPLOYEE,
+      activeEmployees,
+      pricing:             PRICING,
+      price:               computePrice(activeEmployees),
+      freeForever:         company.free_forever,
+      trialEndsAt,
+      inTrial:             Boolean(trialEndsAt && new Date(trialEndsAt) > new Date()),
+      aiPlanningEnabled:   company.ai_planning_enabled,
+      aiGenerationsUsed:   company.ai_planning_enabled ? await countMonthGenerations(companyId) : 0,
       billingEnabled:      Boolean(stripe && process.env.STRIPE_PRICE_ID),
     });
   } catch (err) {

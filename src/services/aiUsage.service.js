@@ -153,6 +153,20 @@ const getAiStats = async (days) => {
   };
 };
 
+// Générations réussies de l'entreprise ce mois-ci (mois calendaire, heure de
+// Paris) : limite de l'option IA, 10 par mois (15 nov. 2026). Les échecs ne
+// comptent pas ; une retouche (« Redemander ») compte comme une génération.
+const countMonthGenerations = async (companyId) => {
+  const r = await db.query(
+    `SELECT count(*)::int AS count FROM ai_generations
+     WHERE company_id = $1 AND status = 'proposee'
+       AND date_trunc('month', created_at AT TIME ZONE 'Europe/Paris')
+         = date_trunc('month', NOW() AT TIME ZONE 'Europe/Paris')`,
+    [companyId]
+  );
+  return r.rows[0].count;
+};
+
 module.exports = {
-  recordGeneration, markApplied, getCredit, addCreditEvent, deleteCreditEvent, getAiStats, ALERT_USD,
+  countMonthGenerations, recordGeneration, markApplied, getCredit, addCreditEvent, deleteCreditEvent, getAiStats, ALERT_USD,
 };

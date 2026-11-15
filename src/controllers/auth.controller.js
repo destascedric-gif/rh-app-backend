@@ -4,7 +4,7 @@ const crypto   = require('crypto');
 const db       = require('../config/db');
 const { sendMail, FRONTEND_URL } = require('../config/mailer');
 const { CGU_VERSION } = require('../config/legal');
-const { checkEmployeeLimit, syncSubscriptionQuantity } = require('../services/billing.service');
+const { syncSubscriptionQuantity } = require('../services/billing.service');
 const { DEFAULT_LEAVE_ACCRUAL } = require('../services/leaves.service');
 
 // ─────────────────────────────────────────────
@@ -236,10 +236,8 @@ const inviteEmployee = async (req, res) => {
       return res.status(409).json({ message: 'Cet email est déjà utilisé.' });
     }
 
-    const limitError = await checkEmployeeLimit(companyId);
-    if (limitError) {
-      return res.status(403).json({ message: limitError, code: 'PLAN_LIMIT' });
-    }
+    // Pas de limite du nombre de salariés : depuis le 15 nov. 2026, Orgaly
+    // affiche le prix calculé sans rien bloquer (pas encore de paiement en ligne)
 
     // Génère un token d'invitation unique (valable 48h)
     const inviteToken  = crypto.randomBytes(32).toString('hex');

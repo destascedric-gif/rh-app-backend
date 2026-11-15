@@ -1,17 +1,53 @@
 const db     = require('../config/db');
 const stripe = require('../config/stripe');
 
-// Plan gratuit : jusqu'à 5 employés actifs (l'administrateur n'est pas compté).
-// Plan Pro : 3,90 € HT par employé actif et par mois, facturé par Stripe
-// (le prix lui-même est défini côté Stripe, STRIPE_PRICE_ID).
-const FREE_EMPLOYEE_LIMIT  = 5;
-const PRO_PRICE_PER_EMPLOYEE = 3.9;
+// Tarifs décidés par Cédric le 13 nov. 2026 (affichés et calculés depuis le
+// 15 nov. 2026, sans paiement en ligne pour l'instant) :
+// - les 3 premiers salariés sont toujours offerts ;
+// - 3,90 € HT par salarié en plus et par mois ;
+// - plafond de 79 € HT par mois et par boutique (atteint à 24 salariés) ;
+// - paiement à l'année : 10 mois payés pour 12 (2 mois offerts) ;
+// - 3 mois d'essai gratuits à partir de l'inscription ;
+// - option « IA avancée » : 19,90 € HT par mois, 10 générations par mois.
+// Salarié compté = compte employé actif ou invitation en attente (le gérant
+// n'est pas compté). À garder identique côté site : src/legal/legalInfo.js.
+const FREE_EMPLOYEES       = 3;
+const PRICE_PER_EMPLOYEE   = 3.9;
+const MONTHLY_CAP          = 79;
+const ANNUAL_MONTHS_PAID   = 10;
+const TRIAL_MONTHS         = 3;
+const AI_OPTION_PRICE      = 19.9;
+const AI_MONTHLY_GENERATIONS = Number(process.env.AI_PLANNING_MONTHLY_LIMIT) || 10;
+
+// Prix HT pour un nombre de salariés (calcul en centimes, sans arrondi flottant)
+const computePrice = (employees) => {
+  const billed = Math.max(0, (Number(employees) || 0) - FREE_EMPLOYEES);
+  const cents = Math.min(MONTHLY_CAP * 100, billed * Math.round(PRICE_PER_EMPLOYEE * 100));
+  return {
+    billedEmployees: billed,
+    monthly: cents / 100,
+    annual: (cents * ANNUAL_MONTHS_PAID) / 100,
+    capped: billed * Math.round(PRICE_PER_EMPLOYEE * 100) > MONTHLY_CAP * 100,
+  };
+};
+
+const PRICING = {
+  freeEmployees: FREE_EMPLOYEES,
+  pricePerEmployee: PRICE_PER_EMPLOYEE,
+  monthlyCap: MONTHLY_CAP,
+  annualMonthsPaid: ANNUAL_MONTHS_PAID,
+  trialMonths: TRIAL_MONTHS,
+  aiOptionPrice: AI_OPTION_PRICE,
+  aiMonthlyGenerations: AI_MONTHLY_GENERATIONS,
+};
 
 // Statuts Stripe qui donnent accès au plan Pro. "past_due" en fait partie :
 // Stripe relance le paiement pendant plusieurs jours, on ne coupe pas l'accès
 // au premier échec de carte.
 const PRO_STATUSES = ['active', 'trialing', 'past_due'];
 
+// Salariés comptés : comptes employés actifs, invitations en attente
+// comprises (un compte invité est actif dès sa création).
 const countActiveEmployees = async (companyId) => {
   const result = await db.query(
     `SELECT COUNT(*)::int AS count FROM users
@@ -19,24 +55,6 @@ const countActiveEmployees = async (companyId) => {
     [companyId]
   );
   return result.rows[0].count;
-};
-
-const getCompanyPlan = async (companyId) => {
-  const result = await db.query('SELECT plan FROM company WHERE id = $1', [companyId]);
-  return result.rows[0]?.plan ?? 'free';
-};
-
-// Renvoie un message d'erreur si l'entreprise ne peut pas ajouter (ou
-// réactiver) un employé de plus avec son plan actuel, sinon null.
-const checkEmployeeLimit = async (companyId) => {
-  const plan = await getCompanyPlan(companyId);
-  if (plan === 'pro') return null;
-
-  const count = await countActiveEmployees(companyId);
-  if (count < FREE_EMPLOYEE_LIMIT) return null;
-
-  return `Le plan gratuit est limité à ${FREE_EMPLOYEE_LIMIT} employés actifs. `
-    + 'Passez au plan Pro pour en ajouter davantage.';
 };
 
 // Aligne la quantité facturée sur le nombre d'employés actifs. Appelée après
@@ -106,10 +124,13 @@ const applySubscription = async (subscription) => {
 };
 
 module.exports = {
-  FREE_EMPLOYEE_LIMIT,
-  PRO_PRICE_PER_EMPLOYEE,
+  PRICING,
+  FREE_EMPLOYEES,
+  PRICE_PER_EMPLOYEE,
+  TRIAL_MONTHS,
+  AI_MONTHLY_GENERATIONS,
+  computePrice,
   countActiveEmployees,
-  checkEmployeeLimit,
   syncSubscriptionQuantity,
   applySubscription,
 };

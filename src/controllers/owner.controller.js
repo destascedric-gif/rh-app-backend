@@ -2,7 +2,20 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../config/db');
 const { DEMO_EMAIL_DOMAIN } = require('../config/mailer');
-const { FREE_EMPLOYEE_LIMIT } = require('../services/billing.service');
+const { PRICING, FREE_EMPLOYEES, computePrice } = require('../services/billing.service');
+
+// Prix calculé d'une entreprise (tarifs du 13 nov. 2026) : rien n'est encore
+// encaissé, c'est ce qu'elle paierait. Gratuite pour toujours (SAS LLDB) ou
+// en période d'essai : 0 € à payer aujourd'hui, prix « normal » gardé à côté.
+const withPrice = (c) => {
+  const price = computePrice(c.employees + (c.pending_invites || 0));
+  const inTrial = Boolean(c.trial_ends_at && new Date(c.trial_ends_at) > new Date());
+  return {
+    ...c,
+    price_month: c.free_forever ? 0 : price.monthly,
+    billing_state: c.free_forever ? 'offert' : price.monthly === 0 ? 'gratuit' : inTrial ? 'essai' : 'payant',
+  };
+};
 const { labelOf, getTimingStats, getTimingSeries, RETENTION_DAYS } = require('../services/activityLog.service');
 
 // ─────────────────────────────────────────────
@@ -94,7 +107,8 @@ const getStats = async (req, res) => {
       // Activité : dernière trace connue dans le planning, les congés, le
       // pointage ou l'équipe (le journal des actions viendra s'y ajouter)
       db.query(
-        `SELECT c.id, c.name, c.created_at, c.plan,
+        `SELECT c.id, c.name, c.created_at, c.plan, c.free_forever,
+              c.created_at + make_interval(months => ${PRICING.trialMonths}) AS trial_ends_at,
                 (SELECT count(*) FROM users u
                    WHERE u.company_id = c.id AND u.role = 'employee' AND u.is_active)::int AS employees,
                 (SELECT count(*) FROM shifts s
@@ -113,6 +127,7 @@ const getStats = async (req, res) => {
       ),
     ]);
 
+    const companiesPriced = companies.rows.map(withPrice);
     const planCount = (p) => plans.rows.find((r) => r.plan === p)?.count ?? 0;
     const proCount = planCount('pro');
 
@@ -121,11 +136,12 @@ const getStats = async (req, res) => {
       totals: { ...totals.rows[0], revenue_month: null },
       series: series.rows,
       plans: { free: totals.rows[0].companies - proCount, pro: proCount },
-      free_limit: FREE_EMPLOYEE_LIMIT,
-      near_limit: companies.rows
-        .filter((c) => c.plan !== 'pro' && c.employees >= FREE_EMPLOYEE_LIMIT - 1)
+      pricing: PRICING,
+      // À 3 salariés, le prochain rend l'abonnement payant
+      near_limit: companiesPriced
+        .filter((c) => !c.free_forever && c.employees === FREE_EMPLOYEES)
         .map((c) => ({ id: c.id, name: c.name, employees: c.employees })),
-      companies: companies.rows,
+      companies: companiesPriced,
     });
   } catch (err) {
     console.error(err);
@@ -219,7 +235,8 @@ const getCompany = async (req, res) => {
 
   try {
     const company = (await db.query(
-      `SELECT c.id, c.name, c.created_at, c.plan,
+      `SELECT c.id, c.name, c.created_at, c.plan, c.free_forever,
+              c.created_at + make_interval(months => ${PRICING.trialMonths}) AS trial_ends_at,
               (SELECT count(*) FROM users u WHERE u.company_id = c.id AND u.role = 'employee' AND u.is_active AND u.invite_accepted)::int AS employees,
               (SELECT count(*) FROM users u WHERE u.company_id = c.id AND u.role = 'employee' AND u.is_active AND NOT u.invite_accepted)::int AS pending_invites,
               (SELECT count(*) FROM users u WHERE u.company_id = c.id AND u.role = 'employee' AND NOT u.is_active)::int AS inactive_employees,
@@ -266,8 +283,8 @@ const getCompany = async (req, res) => {
     ]);
 
     res.json({
-      company,
-      free_limit: FREE_EMPLOYEE_LIMIT,
+      company: withPrice(company),
+      pricing: PRICING,
       weeks: weeks.rows,
       top_actions: actions.rows.map((a) => ({ label: labelOf(a.action, 'ok'), count: a.count })),
     });

@@ -1,6 +1,6 @@
 const db = require('../config/db');
 const { toLocalDateString } = require('../utils/date');
-const { checkEmployeeLimit, syncSubscriptionQuantity } = require('../services/billing.service');
+const { syncSubscriptionQuantity } = require('../services/billing.service');
 
 // GET /api/employees/timesheets/pending — tous les pointages en attente de
 // validation de l'entreprise (pour le tableau de bord admin)
@@ -236,10 +236,8 @@ const reactivateEmployee = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const limitError = await checkEmployeeLimit(companyId);
-    if (limitError) {
-      return res.status(403).json({ message: limitError, code: 'PLAN_LIMIT' });
-    }
+    // Pas de limite du nombre de salariés : depuis le 15 nov. 2026, Orgaly
+    // affiche le prix calculé sans rien bloquer (pas encore de paiement en ligne)
 
     const result = await db.query(
       `UPDATE users SET is_active = TRUE, updated_at = NOW()
