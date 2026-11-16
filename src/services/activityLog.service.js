@@ -50,6 +50,7 @@ const ACTION_LABELS = {
   'POST /api/presence-rules/': 'a ajouté une règle de présence',
   'DELETE /api/presence-rules/:id': 'a supprimé une règle de présence',
   'POST /api/owner/setup': null,
+  'PATCH /api/owner/companies/:id/ai': "a activé ou coupé l'option IA d'une entreprise (pilotage)",
   'POST /api/payroll/generate': 'a généré un bulletin de paie',
   'POST /api/payroll/generate-all': 'a généré les bulletins du mois',
   'DELETE /api/payroll/:id': 'a supprimé un bulletin de paie',
