@@ -12,7 +12,9 @@ const FROM_NAME  = process.env.SMTP_FROM_NAME || 'RH App';
 const DEMO_EMAIL_DOMAIN = '@demo.myorgaly.fr';
 const { logActivity } = require('../services/activityLog.service');
 
-const sendMail = async ({ to, subject, html }) => {
+// replyTo (facultatif) : adresse à laquelle « Répondre » écrira (formulaire
+// de contact du site : la personne qui a écrit)
+const sendMail = async ({ to, subject, html, replyTo }) => {
   if (String(to).toLowerCase().endsWith(DEMO_EMAIL_DOMAIN)) {
     console.log(`E-mail non envoyé (compte de démonstration) : ${subject}`);
     return { skipped: true };
@@ -30,6 +32,7 @@ const sendMail = async ({ to, subject, html }) => {
       to: [{ email: to }],
       subject,
       htmlContent: html,
+      ...(replyTo ? { replyTo } : {}),
     }),
   });
 

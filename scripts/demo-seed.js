@@ -100,7 +100,11 @@ const main = async () => {
               overtime_tier1_rate = DEFAULT, overtime_tier2_rate = DEFAULT,
               overtime_tier2_threshold_hours = DEFAULT,
               manager_in_schedule = DEFAULT, meetings_count_as_work = DEFAULT,
-              team_schedule_visible = DEFAULT, open_days = DEFAULT,
+              team_schedule_visible = DEFAULT,
+              -- La pharmacie de démo ouvre du lundi au samedi (le planning
+              -- d'exemple a des créneaux le samedi ; avant : samedi fermé
+              -- par défaut, d'où des « Jour fermé » partout)
+              open_days = '1111110',
               pentecost_monday_worked = DEFAULT,
               idcc = '1996', collective_agreement = 'Pharmacie d''officine'
        WHERE id = $6`,
@@ -114,8 +118,8 @@ const main = async () => {
     // doit rester possible pendant une présentation.
     companyId = (await db.query(
       `INSERT INTO company (name, address, postal_code, city, sector, plan, leave_accrual_per_month,
-                           idcc, collective_agreement)
-       VALUES ($1, $2, $3, $4, $5, 'pro', $6, '1996', 'Pharmacie d''officine') RETURNING id`,
+                           idcc, collective_agreement, open_days)
+       VALUES ($1, $2, $3, $4, $5, 'pro', $6, '1996', 'Pharmacie d''officine', '1111110') RETURNING id`,
       [COMPANY.name, COMPANY.address, COMPANY.postal_code, COMPANY.city, COMPANY.sector, DEFAULT_LEAVE_ACCRUAL]
     )).rows[0].id;
     adminId = (await db.query(

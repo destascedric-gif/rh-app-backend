@@ -18,6 +18,7 @@ const RETENTION_MONTHS = 13;
 const PUBLIC_PATHS = new Set([
   '/', '/login', '/setup/admin', '/setup/company', '/mot-de-passe-oublie',
   '/mentions-legales', '/cgu', '/cgv', '/confidentialite', '/dpa',
+  '/tarifs', '/contact', // site vitrine (16 nov. 2026)
 ]);
 
 // ?src=… des liens que Cédric diffuse
