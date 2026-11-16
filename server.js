@@ -45,8 +45,11 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-    else callback(new Error('Origine non autorisée par CORS.'));
+    // Origine inconnue (ex. robot de Vercel qui ouvre chaque nouvelle version
+    // du site sur son adresse d'essai) : on n'envoie simplement pas les
+    // en-têtes CORS, le navigateur bloque la réponse. Pas d'erreur levée,
+    // sinon chaque mise en ligne déclenchait de fausses alertes Sentry.
+    callback(null, !origin || allowedOrigins.includes(origin));
   },
   credentials: true,
 }));
