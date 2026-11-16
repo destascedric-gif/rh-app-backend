@@ -1,6 +1,6 @@
 const db     = require('../config/db');
 const stripe = require('../config/stripe');
-const { FRONTEND_URL } = require('../config/mailer');
+const { FRONTEND_URL, sendMail } = require('../config/mailer');
 const { CGV_VERSION }  = require('../config/legal');
 const {
   PRICING,
@@ -20,7 +20,7 @@ const getBilling = async (req, res) => {
   try {
     const result = await db.query(
       `SELECT plan, subscription_status, current_period_end, cancel_at_period_end,
-              stripe_customer_id, free_forever, ai_planning_enabled,
+              stripe_customer_id, free_forever, ai_planning_enabled, ai_option_requested_at,
               created_at + make_interval(months => $2) AS trial_ends_at
        FROM company WHERE id = $1`,
       [companyId, PRICING.trialMonths]
@@ -43,6 +43,7 @@ const getBilling = async (req, res) => {
       trialEndsAt,
       inTrial:             Boolean(trialEndsAt && new Date(trialEndsAt) > new Date()),
       aiPlanningEnabled:   company.ai_planning_enabled,
+      aiOptionRequestedAt: company.ai_option_requested_at,
       aiGenerationsUsed:   company.ai_planning_enabled ? await countMonthGenerations(companyId) : 0,
       billingEnabled:      Boolean(stripe && process.env.STRIPE_PRICE_ID),
     });
@@ -184,4 +185,58 @@ const handleWebhook = async (req, res) => {
   }
 };
 
-module.exports = { getBilling, createCheckoutSession, createPortalSession, handleWebhook };
+// POST /api/billing/ai-request — le gérant demande l'option « IA avancée »
+// (16 nov. 2026) : e-mail à Orgaly (contact@myorgaly.fr) avec l'entreprise,
+// le gérant et le nombre de salariés ; « Répondre » écrit au gérant. La date
+// est notée (une seule demande). Cédric active ensuite l'option à la main.
+const CONTACT_EMAIL = process.env.CONTACT_EMAIL || 'contact@myorgaly.fr';
+const escapeHtml = (v) => String(v ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const requestAiOption = async (req, res) => {
+  const { companyId, id: userId } = req.user;
+  try {
+    const result = await db.query(
+      `SELECT c.name, c.ai_planning_enabled, c.ai_option_requested_at,
+              u.email, u.first_name, u.last_name
+       FROM company c JOIN users u ON u.id = $2 AND u.company_id = c.id
+       WHERE c.id = $1`,
+      [companyId, userId]
+    );
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ message: 'Entreprise introuvable.' });
+    if (row.ai_planning_enabled) return res.status(409).json({ message: "L'option IA avancée est déjà active." });
+    if (row.ai_option_requested_at) return res.json({ requestedAt: row.ai_option_requested_at });
+
+    const employees = await countActiveEmployees(companyId);
+    const manager = `${row.first_name || ''} ${row.last_name || ''}`.trim();
+    const line = (label, value) =>
+      `<tr><td style="padding:4px 16px 4px 0;color:#666">${label}</td><td><strong>${escapeHtml(value)}</strong></td></tr>`;
+    await sendMail({
+      to: CONTACT_EMAIL,
+      replyTo: { email: row.email, name: manager || row.email },
+      subject: `[Orgaly] Demande de l'option IA avancée — ${row.name}`,
+      html: `
+        <h2 style="margin:0 0 12px">Demande de l'option IA avancée</h2>
+        <table style="border-collapse:collapse;margin:0 0 16px">
+          ${line('Entreprise', row.name)}
+          ${line('Gérant', manager)}
+          ${line('E-mail', row.email)}
+          ${line('Salariés', employees)}
+        </table>
+        <p style="color:#888;font-size:13px">Pour activer l'option : colonne company.ai_planning_enabled
+        (interrupteur du pilotage à venir). « Répondre » écrit directement au gérant.</p>
+      `,
+    });
+    const upd = await db.query(
+      'UPDATE company SET ai_option_requested_at = NOW() WHERE id = $1 RETURNING ai_option_requested_at',
+      [companyId]
+    );
+    res.json({ requestedAt: upd.rows[0].ai_option_requested_at });
+  } catch (err) {
+    console.error('Demande option IA :', err.message);
+    res.status(502).json({ message: "La demande n'a pas pu être envoyée. Réessayez, ou écrivez à contact@myorgaly.fr." });
+  }
+};
+
+module.exports = { getBilling, createCheckoutSession, createPortalSession, handleWebhook, requestAiOption };

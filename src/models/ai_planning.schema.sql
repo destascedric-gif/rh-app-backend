@@ -16,3 +16,10 @@ ALTER TABLE users
 -- l'abonnement (option payante). Ne se modifie pas depuis l'appli.
 ALTER TABLE company
   ADD COLUMN IF NOT EXISTS ai_planning_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Demande de l'option « IA avancée » (16 nov. 2026) : le gérant clique sur
+-- « Demander l'option » (page Abonnement) ; Orgaly envoie un e-mail à
+-- Cédric et note ici la date, pour ne pas renvoyer la demande et pour le
+-- filtre « demandée » du pilotage. Cédric active l'option à la main.
+ALTER TABLE company
+  ADD COLUMN IF NOT EXISTS ai_option_requested_at TIMESTAMPTZ;

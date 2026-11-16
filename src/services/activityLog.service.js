@@ -27,6 +27,7 @@ const ACTION_LABELS = {
   'POST /api/ai-planning/confirm-contract': "a confirmé la fiche d'un salarié (planning par IA)",
   'POST /api/billing/checkout': 'a ouvert le paiement de la formule Pro',
   'POST /api/billing/portal': "a ouvert la gestion de l'abonnement",
+  'POST /api/billing/ai-request': "a demandé l'option IA avancée",
   'POST /api/employees/me/timesheets': 'a pointé',
   'PUT /api/employees/me/timesheets/:timesheetId': 'a modifié son pointage',
   'DELETE /api/employees/me/timesheets/:timesheetId': 'a supprimé un pointage',
