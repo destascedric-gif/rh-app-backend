@@ -17,6 +17,8 @@ router.get('/activity', auth, isOwner, ctrl.getActivity);
 router.get('/health', auth, isOwner, ctrl.getHealth);
 router.get('/health/history', auth, isOwner, ctrl.getHealthHistory);
 router.get('/companies/:id', auth, isOwner, ctrl.getCompany);
+// Interrupteur de l'option « IA avancée » d'une entreprise
+router.patch('/companies/:id/ai', auth, isOwner, ctrl.setCompanyAi);
 // Intelligence artificielle (dépenses, crédit estimé) et visites du site
 router.get('/ai', auth, isOwner, ctrl.getAi);
 router.post('/ai/credit', auth, isOwner, validate(creditEventSchema), ctrl.addAiCredit);

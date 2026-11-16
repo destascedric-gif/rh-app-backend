@@ -108,7 +108,7 @@ const getStats = async (req, res) => {
       // Activité : dernière trace connue dans le planning, les congés, le
       // pointage ou l'équipe (le journal des actions viendra s'y ajouter)
       db.query(
-        `SELECT c.id, c.name, c.created_at, c.plan, c.free_forever,
+        `SELECT c.id, c.name, c.created_at, c.plan, c.free_forever, c.ai_planning_enabled, c.ai_option_requested_at,
               c.created_at + make_interval(months => ${PRICING.trialMonths}) AS trial_ends_at,
                 (SELECT count(*) FROM users u
                    WHERE u.company_id = c.id AND u.role = 'employee' AND u.is_active)::int AS employees,
@@ -258,7 +258,7 @@ const getCompany = async (req, res) => {
 
   try {
     const company = (await db.query(
-      `SELECT c.id, c.name, c.created_at, c.plan, c.free_forever,
+      `SELECT c.id, c.name, c.created_at, c.plan, c.free_forever, c.ai_planning_enabled, c.ai_option_requested_at,
               c.created_at + make_interval(months => ${PRICING.trialMonths}) AS trial_ends_at,
               (SELECT count(*) FROM users u WHERE u.company_id = c.id AND u.role = 'employee' AND u.is_active AND u.invite_accepted)::int AS employees,
               (SELECT count(*) FROM users u WHERE u.company_id = c.id AND u.role = 'employee' AND u.is_active AND NOT u.invite_accepted)::int AS pending_invites,
@@ -307,12 +307,39 @@ const getCompany = async (req, res) => {
       ),
     ]);
 
+    const aiGenerationsMonth = await aiUsage.countMonthGenerations(id);
     res.json({
-      company: withPrice(company),
+      company: { ...withPrice(company), ai_generations_month: aiGenerationsMonth },
       pricing: PRICING,
       weeks: weeks.rows,
       top_actions: actions.rows.map((a) => ({ label: labelOf(a.action, 'ok'), count: a.count })),
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+};
+
+// PATCH /api/owner/companies/:id/ai  { enabled: true|false } — interrupteur
+// « IA avancée » de la fiche entreprise (16 nov. 2026) : Cédric active
+// l'option lui-même après une demande. Couper l'option efface aussi la date
+// de demande, pour que le gérant puisse la redemander plus tard.
+const setCompanyAi = async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(404).json({ message: 'Entreprise introuvable.' });
+  if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ message: 'Valeur invalide.' });
+
+  try {
+    const result = await db.query(
+      `UPDATE company c
+       SET ai_planning_enabled = $3,
+           ai_option_requested_at = CASE WHEN $3 THEN c.ai_option_requested_at ELSE NULL END
+       WHERE c.id = $2 AND ${REAL_COMPANY}
+       RETURNING ai_planning_enabled, ai_option_requested_at`,
+      [DEMO_EMAIL_DOMAIN, id, req.body.enabled]
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: 'Entreprise introuvable.' });
+    res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -370,5 +397,5 @@ const getVisits = async (req, res) => {
 };
 
 module.exports = {
-  setupPassword, getStats, getActivity, getHealth, getHealthHistory, getCompany, getAi, addAiCredit, deleteAiCredit, getVisits,
+  setupPassword, getStats, getActivity, getHealth, getHealthHistory, getCompany, setCompanyAi, getAi, addAiCredit, deleteAiCredit, getVisits,
 };
