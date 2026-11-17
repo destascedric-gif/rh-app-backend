@@ -15,6 +15,6 @@ router.use(auth, isAdmin);
 router.get ('/',         ctrl.getBilling);
 router.post('/checkout', validate(checkoutSchema), ctrl.createCheckoutSession);
 router.post('/portal',   ctrl.createPortalSession);
-router.post('/ai-request', ctrl.requestAiOption); // demande de l'option IA (16 nov. 2026)
+router.post('/ai-request', ctrl.requestAiOption); // demande de l'option IA par e-mail (16 nov. 2026)
 
 module.exports = router;
