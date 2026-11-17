@@ -9,6 +9,7 @@ const {
   resolveBasePrice,
   countActiveEmployees,
   applySubscription,
+  restartAfterTrialDiscount,
   billingConfigured,
   aiBillingConfigured,
 } = require('../services/billing.service');
@@ -17,7 +18,10 @@ const { countMonthGenerations } = require('../services/aiUsage.service');
 const billingDisabled = (res) =>
   res.status(503).json({ message: 'La facturation en ligne n\'est pas encore disponible.' });
 
-const isDemoEmail = (email) => String(email || '').toLowerCase().endsWith(DEMO_EMAIL_DOMAIN);
+// Le paiement est bloqué sur la démo avec la vraie clé Stripe ; en mode test
+// (clé sk_test_), la démo sert justement à essayer le parcours de paiement.
+const isDemoEmail = (email) => !String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_test_')
+  && String(email || '').toLowerCase().endsWith(DEMO_EMAIL_DOMAIN);
 
 // Stripe exige qu'une période d'essai se termine au moins 48 h plus tard
 const MIN_TRIAL_MS = 49 * 3600 * 1000;
@@ -80,7 +84,7 @@ const createCheckoutSession = async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT c.name, c.plan, c.free_forever, c.stripe_customer_id, c.stripe_ai_subscription_id,
+      `SELECT c.name, c.plan, c.free_forever, c.stripe_customer_id, c.stripe_subscription_id, c.stripe_ai_subscription_id,
               c.ai_planning_enabled, u.email,
               c.created_at + make_interval(months => $3) AS trial_ends_at
        FROM company c JOIN users u ON u.id = $2 AND u.company_id = c.id
@@ -97,7 +101,7 @@ const createCheckoutSession = async (req, res) => {
     const subscriptionData = { metadata: { companyId, product } };
     if (product === 'base') {
       if (company.free_forever) return res.status(409).json({ message: 'Votre abonnement est offert.' });
-      if (company.plan === 'pro') return res.status(409).json({ message: 'Votre abonnement est déjà en place.' });
+      if (company.stripe_subscription_id) return res.status(409).json({ message: 'Votre abonnement est déjà en place.' });
       const billed = Math.max(0, (await countActiveEmployees(companyId)) - PRICING.freeEmployees);
       if (billed === 0) {
         return res.status(409).json({ message: `Rien à payer : Orgaly est gratuit jusqu'à ${PRICING.freeEmployees} salariés.` });
@@ -137,6 +141,8 @@ const createCheckoutSession = async (req, res) => {
       customer:             customerId,
       client_reference_id:  companyId,
       line_items:           lineItems,
+      // Carte seulement (Stripe proposait aussi Klarna, Amazon Pay…, inadaptés à un abonnement pro)
+      payment_method_types: ['card'],
       subscription_data:    subscriptionData,
       locale:               'fr',
       billing_address_collection: 'required',
@@ -212,6 +218,10 @@ const handleWebhook = async (req, res) => {
       }
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
+      case 'customer.subscription.trial_will_end':
+        // Fin d'essai dans 3 jours : relance des offres « après l'essai »
+        await restartAfterTrialDiscount(event.data.object.id);
+        break;
       case 'customer.subscription.deleted':
         await applySubscription(await stripe.subscriptions.retrieve(event.data.object.id));
         break;

@@ -185,6 +185,33 @@ const applySubscription = async (subscription) => {
   return result.rows[0]?.id ?? null;
 };
 
+// Offres « après l'essai » (ex. Black Friday 2026 : −20 % pendant 3 mois
+// après l'essai). Stripe fait démarrer la réduction le jour de la
+// souscription : prise pendant l'essai, elle serait en partie consommée
+// avant le premier paiement (vérifié le 17 nov. 2026 avec une horloge de
+// test : 1 seul mois réduit sur 3). Quand Stripe annonce la fin de l'essai
+// (3 jours avant), on repose donc le même coupon, qui repart pour sa durée
+// complète. Seuls les coupons marqués metadata.apres_essai = 'oui' sont concernés.
+const discountCouponId = (d) => {
+  const c = d?.coupon ?? d?.source?.coupon;
+  return typeof c === 'string' ? c : c?.id ?? null;
+};
+
+const restartAfterTrialDiscount = async (subscriptionId) => {
+  const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ['discounts'] });
+  if (sub.status !== 'trialing') return;
+  for (const d of sub.discounts || []) {
+    const couponId = discountCouponId(d);
+    if (!couponId) continue;
+    const coupon = await stripe.coupons.retrieve(couponId);
+    if (coupon.metadata?.apres_essai !== 'oui' || !coupon.valid) continue;
+    // Reposer le même coupon garde l'ancienne date de départ : on le retire d'abord
+    await stripe.subscriptions.update(sub.id, { discounts: '' });
+    await stripe.subscriptions.update(sub.id, { discounts: [{ coupon: couponId }] });
+    return;
+  }
+};
+
 module.exports = {
   PRICING,
   FREE_EMPLOYEES,
@@ -199,4 +226,5 @@ module.exports = {
   countActiveEmployees,
   syncSubscriptionQuantity,
   applySubscription,
+  restartAfterTrialDiscount,
 };
