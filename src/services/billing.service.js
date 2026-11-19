@@ -131,14 +131,10 @@ const syncSubscriptionQuantity = async (companyId) => {
 
     const billed = Math.max(0, (await countActiveEmployees(companyId)) - FREE_EMPLOYEES);
 
-    // Retour à 3 salariés ou moins : plus rien à payer. Stripe ne permet pas
-    // de vider un abonnement : on l'arrête, avec un avoir pour la période
-    // déjà payée (déduit d'un prochain abonnement).
-    if (billed === 0) {
-      await stripe.subscriptions.cancel(company.stripe_subscription_id, { prorate: true });
-      return;
-    }
-
+    // Retour à 3 salariés ou moins : l'abonnement reste en place à 0 €
+    // (quantité 0, acceptée par Stripe) au lieu d'être résilié. Avant le
+    // 19 nov. 2026 il était résilié, et un gérant qui remettait ensuite ses
+    // salariés n'était plus jamais facturé.
     const resolved = resolveBasePrice(company.billing_interval, billed);
     await stripe.subscriptionItems.update(company.stripe_subscription_item_id, {
       price:    resolved.priceId,

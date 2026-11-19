@@ -223,12 +223,12 @@ const handleWebhook = async (req, res) => {
       }
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
+      case 'customer.subscription.deleted':
+        await applySubscription(await stripe.subscriptions.retrieve(event.data.object.id));
+        break;
       case 'customer.subscription.trial_will_end':
         // Fin d'essai dans 3 jours : relance des offres « après l'essai »
         await restartAfterTrialDiscount(event.data.object.id);
-        break;
-      case 'customer.subscription.deleted':
-        await applySubscription(await stripe.subscriptions.retrieve(event.data.object.id));
         break;
       default:
         break; // événement non utilisé : accusé de réception quand même
