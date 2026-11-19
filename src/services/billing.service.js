@@ -72,6 +72,29 @@ const resolveBasePrice = (interval, billedEmployees) => {
     : { priceId: prices.perEmployee, quantity: billedEmployees };
 };
 
+// Phrase affichée sur la page de paiement Stripe, au-dessus du bouton
+// « Payer » : Stripe n'y montre qu'une quantité (« Orgaly Pro × 3 ») qui
+// correspond aux salariés payants, ce qui surprenait (19 nov. 2026).
+const frEuros = (n) => n.toLocaleString('fr-FR', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+const checkoutMessage = (product, interval, employees) => {
+  if (product === 'ai') {
+    return `Option IA avancée : ${AI_MONTHLY_GENERATIONS} plannings du mois générés par mois, `
+      + `${frEuros(AI_OPTION_PRICE)} € HT par mois, sans engagement.`;
+  }
+  const billed = Math.max(0, employees - FREE_EMPLOYEES);
+  const yearly = interval === 'year';
+  const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
+  const head = billed * PRICE_PER_EMPLOYEE_CENTS > MONTHLY_CAP_CENTS
+    ? `${plural(employees, 'salarié')} : le plafond est atteint, vous payez `
+      + (yearly ? `${frEuros(MONTHLY_CAP * ANNUAL_MONTHS_PAID)} € HT par an.` : `${frEuros(MONTHLY_CAP)} € HT par mois.`)
+    : `${plural(employees, 'salarié')}, dont ${FREE_EMPLOYEES} offerts : vous payez pour ${plural(billed, 'salarié')}, `
+      + (yearly
+        ? `${frEuros(PRICE_PER_EMPLOYEE * ANNUAL_MONTHS_PAID)} € HT par an chacun.`
+        : `${frEuros(PRICE_PER_EMPLOYEE)} € HT par mois chacun.`);
+  return `${head}${yearly ? ` À l'année, ${ANNUAL_MONTHS_PAID} mois payés pour 12.` : ''} `
+    + 'Le prix suit votre équipe : il s\'ajuste tout seul quand vous ajoutez ou retirez un salarié. Le gérant n\'est pas compté.';
+};
+
 // Statuts Stripe qui donnent accès. "past_due" en fait partie : Stripe
 // relance le paiement pendant plusieurs jours, on ne coupe pas l'accès au
 // premier échec de carte. "trialing" = abonnement pris pendant l'essai,
@@ -223,6 +246,7 @@ module.exports = {
   aiBillingConfigured,
   computePrice,
   resolveBasePrice,
+  checkoutMessage,
   countActiveEmployees,
   syncSubscriptionQuantity,
   applySubscription,

@@ -7,6 +7,7 @@ const {
   AI_PRICE,
   computePrice,
   resolveBasePrice,
+  checkoutMessage,
   countActiveEmployees,
   applySubscription,
   restartAfterTrialDiscount,
@@ -98,11 +99,13 @@ const createCheckoutSession = async (req, res) => {
     }
 
     let lineItems;
+    let employees = 0;
     const subscriptionData = { metadata: { companyId, product } };
     if (product === 'base') {
       if (company.free_forever) return res.status(409).json({ message: 'Votre abonnement est offert.' });
       if (company.stripe_subscription_id) return res.status(409).json({ message: 'Votre abonnement est déjà en place.' });
-      const billed = Math.max(0, (await countActiveEmployees(companyId)) - PRICING.freeEmployees);
+      employees = await countActiveEmployees(companyId);
+      const billed = Math.max(0, employees - PRICING.freeEmployees);
       if (billed === 0) {
         return res.status(409).json({ message: `Rien à payer : Orgaly est gratuit jusqu'à ${PRICING.freeEmployees} salariés.` });
       }
@@ -141,8 +144,8 @@ const createCheckoutSession = async (req, res) => {
       customer:             customerId,
       client_reference_id:  companyId,
       line_items:           lineItems,
-      // Carte seulement (Stripe proposait aussi Klarna, Amazon Pay…, inadaptés à un abonnement pro)
-      payment_method_types: ['card'],
+      // Moyens de paiement : réglés dans le tableau de bord Stripe (cartes, Apple Pay,
+      // Link ; le 19 nov. 2026). Stripe refuse désormais payment_method_types ici.
       subscription_data:    subscriptionData,
       locale:               'fr',
       billing_address_collection: 'required',
@@ -151,6 +154,8 @@ const createCheckoutSession = async (req, res) => {
       customer_update:      { name: 'auto', address: 'auto' },
       // Codes promo créés par Cédric dans Stripe (ex. Black Friday)
       allow_promotion_codes: true,
+      // Explique la quantité affichée par Stripe (« × 3 » = salariés payants)
+      custom_text:          { submit: { message: checkoutMessage(product, interval, employees) } },
       success_url:          `${FRONTEND_URL}/abonnement?statut=succes`,
       cancel_url:           `${FRONTEND_URL}/abonnement?statut=annule`,
     });
