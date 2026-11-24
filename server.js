@@ -13,6 +13,7 @@ const settingsRoutes = require('./src/routes/settings.routes');
 const shiftTemplatesRoutes = require('./src/routes/shiftTemplates.routes');
 const weekTemplatesRoutes = require('./src/routes/weekTemplates.routes');
 const visitsRoutes = require('./src/routes/visits.routes');
+const calendarRoutes = require('./src/routes/calendar.routes');
 const contactRoutes = require('./src/routes/contact.routes');
 const { startVisitsPurge } = require('./src/services/visits.service');
 const { startHealthHistory } = require('./src/services/healthHistory.service');
@@ -73,6 +74,8 @@ app.use('/api/settings',  settingsRoutes);
 app.use('/api/shift-templates', shiftTemplatesRoutes);
 app.use('/api/week-templates', weekTemplatesRoutes);
 app.use('/api/visits', visitsRoutes);
+// Planning dans l'agenda du téléphone (lien personnel .ics)
+app.use('/api/calendar', calendarRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/presence-rules', presenceRulesRoutes);
 app.use('/api/ai-planning', aiPlanningRoutes);

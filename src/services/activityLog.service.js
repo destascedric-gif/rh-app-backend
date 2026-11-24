@@ -49,6 +49,7 @@ const ACTION_LABELS = {
   'PATCH /api/meetings/notifications/read-all': null,
   'POST /api/presence-rules/': 'a ajouté une règle de présence',
   'DELETE /api/presence-rules/:id': 'a supprimé une règle de présence',
+  'POST /api/calendar/link/reset': "a changé son lien d'agenda (planning dans le téléphone)",
   'POST /api/owner/setup': null,
   'PATCH /api/owner/companies/:id/ai': "a activé ou coupé l'option IA d'une entreprise (pilotage)",
   'POST /api/payroll/generate': 'a généré un bulletin de paie',
