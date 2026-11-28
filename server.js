@@ -1,6 +1,7 @@
 require('dotenv').config();
 const Sentry  = require('./src/config/sentry');
 const express = require('express');
+require('./src/middleware/asyncErrors'); // erreurs des routes async → réponse 500 (audit du 28 nov. 2026)
 const cors    = require('cors');
 const helmet  = require('helmet');
 
@@ -87,6 +88,22 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 // Après toutes les routes, avant app.listen : capture les erreurs non
 // gérées par les try/catch des controllers.
 Sentry.setupExpressErrorHandler(app);
+
+// Dernier filet : toute erreur arrivée jusqu'ici reçoit une réponse JSON
+// courte (jamais le détail technique), au lieu de la page d'erreur d'Express
+// ou d'une requête restée sans réponse.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
+  if (status === 500) console.error(err);
+  if (res.headersSent) return;
+  res.status(status).json({ message: status === 500 ? 'Erreur serveur.' : 'Requête invalide.' });
+});
+
+// Erreur hors requête (tâche de fond…) : on la note sans arrêter le serveur.
+process.on('unhandledRejection', (err) => {
+  console.error('Erreur non rattrapée :', err);
+});
 
 startActivityPurge();
 startVisitsPurge();

@@ -25,7 +25,8 @@ const updateEmployeeSchema = z.object({
 const addDocumentSchema = z.object({
   name:    requiredString('Le nom du document'),
   type:    z.enum(DOCUMENT_TYPES, { error: 'Type de document invalide.' }),
-  fileUrl: requiredString('Le fichier'),
+  // Lien web seulement (jamais « javascript: » : le lien est ouvert d'un clic)
+  fileUrl: requiredString('Le fichier').refine((v) => /^https?:\/\//i.test(v), 'Le lien du fichier doit commencer par https://'),
   fileSize: numberLike(),
 });
 

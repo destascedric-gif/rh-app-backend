@@ -313,6 +313,10 @@ const addDocument = async (req, res) => {
   const { name, type, fileUrl, fileSize } = req.body;
 
   try {
+    const check = await db.query('SELECT id FROM users WHERE id = $1 AND company_id = $2', [id, companyId]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ message: 'Employé introuvable.' });
+    }
     const result = await db.query(
       `INSERT INTO documents (user_id, company_id, name, type, file_url, file_size, uploaded_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -398,6 +402,13 @@ const addTimesheet = async (req, res) => {
   const { date, clockIn, clockOut, breakMinutes, note } = req.body;
 
   try {
+    // Le salarié doit appartenir à l'entreprise du gérant : sans ce contrôle,
+    // l'enregistrement « si déjà présent, remplacer » pouvait modifier le
+    // pointage d'un salarié d'une autre entreprise (audit du 28 nov. 2026)
+    const check = await db.query('SELECT id FROM users WHERE id = $1 AND company_id = $2', [id, companyId]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ message: 'Employé introuvable.' });
+    }
     const row = await upsertTimesheet({ userId: id, companyId, date, clockIn, clockOut, breakMinutes, note, status: 'validé' });
     res.status(201).json(row);
   } catch (err) {

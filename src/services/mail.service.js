@@ -1,4 +1,5 @@
 const { sendMail, FRONTEND_URL } = require('../config/mailer');
+const { escapeHtml } = require('../utils/html');
 
 const formatDate = (d) =>
   new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -9,11 +10,11 @@ const sendLeaveApproved = async ({ email, firstName, leaveType, startDate, endDa
     to: email,
     subject: `✅ Demande de congé approuvée`,
     html: `
-      <h2>Bonjour ${firstName},</h2>
+      <h2>Bonjour ${escapeHtml(firstName)},</h2>
       <p>Votre demande de congé a été <strong>approuvée</strong>.</p>
       <table style="border-collapse:collapse;margin:16px 0">
         <tr><td style="padding:6px 16px 6px 0;color:#666">Type</td>
-            <td style="padding:6px 0"><strong>${leaveType}</strong></td></tr>
+            <td style="padding:6px 0"><strong>${escapeHtml(leaveType)}</strong></td></tr>
         <tr><td style="padding:6px 16px 6px 0;color:#666">Du</td>
             <td style="padding:6px 0"><strong>${formatDate(startDate)}</strong></td></tr>
         <tr><td style="padding:6px 16px 6px 0;color:#666">Au</td>
@@ -21,7 +22,7 @@ const sendLeaveApproved = async ({ email, firstName, leaveType, startDate, endDa
         <tr><td style="padding:6px 16px 6px 0;color:#666">Durée</td>
             <td style="padding:6px 0"><strong>${workingDays} jour(s) ouvré(s)</strong></td></tr>
       </table>
-      <p>Bonne vacances !</p>
+      <p>Bonnes vacances !</p>
     `,
   });
 };
@@ -32,17 +33,17 @@ const sendLeaveRefused = async ({ email, firstName, leaveType, startDate, endDat
     to: email,
     subject: `❌ Demande de congé refusée`,
     html: `
-      <h2>Bonjour ${firstName},</h2>
+      <h2>Bonjour ${escapeHtml(firstName)},</h2>
       <p>Votre demande de congé a été <strong>refusée</strong>.</p>
       <table style="border-collapse:collapse;margin:16px 0">
         <tr><td style="padding:6px 16px 6px 0;color:#666">Type</td>
-            <td style="padding:6px 0"><strong>${leaveType}</strong></td></tr>
+            <td style="padding:6px 0"><strong>${escapeHtml(leaveType)}</strong></td></tr>
         <tr><td style="padding:6px 16px 6px 0;color:#666">Du</td>
             <td style="padding:6px 0"><strong>${formatDate(startDate)}</strong></td></tr>
         <tr><td style="padding:6px 16px 6px 0;color:#666">Au</td>
             <td style="padding:6px 0"><strong>${formatDate(endDate)}</strong></td></tr>
       </table>
-      ${adminNote ? `<p><strong>Motif :</strong> ${adminNote}</p>` : ''}
+      ${adminNote ? `<p><strong>Motif :</strong> ${escapeHtml(adminNote)}</p>` : ''}
       <p>N'hésitez pas à contacter votre responsable pour plus d'informations.</p>
     `,
   });
@@ -58,9 +59,9 @@ const sendLeaveRequestToAdmin = async ({ adminEmail, employeeName, leaveType, st
       <h2>Nouvelle demande de congé</h2>
       <table style="border-collapse:collapse;margin:16px 0">
         <tr><td style="padding:6px 16px 6px 0;color:#666">Employé</td>
-            <td style="padding:6px 0"><strong>${employeeName}</strong></td></tr>
+            <td style="padding:6px 0"><strong>${escapeHtml(employeeName)}</strong></td></tr>
         <tr><td style="padding:6px 16px 6px 0;color:#666">Type</td>
-            <td style="padding:6px 0"><strong>${leaveType}</strong></td></tr>
+            <td style="padding:6px 0"><strong>${escapeHtml(leaveType)}</strong></td></tr>
         <tr><td style="padding:6px 16px 6px 0;color:#666">Du</td>
             <td style="padding:6px 0"><strong>${formatDate(startDate)}</strong></td></tr>
         <tr><td style="padding:6px 16px 6px 0;color:#666">Au</td>
@@ -68,7 +69,7 @@ const sendLeaveRequestToAdmin = async ({ adminEmail, employeeName, leaveType, st
         <tr><td style="padding:6px 16px 6px 0;color:#666">Durée</td>
             <td style="padding:6px 0"><strong>${workingDays} jour(s) ouvré(s)</strong></td></tr>
         ${reason ? `<tr><td style="padding:6px 16px 6px 0;color:#666">Motif</td>
-            <td style="padding:6px 0">${reason}</td></tr>` : ''}
+            <td style="padding:6px 0">${escapeHtml(reason)}</td></tr>` : ''}
       </table>
       <a href="${appUrl}" style="
         display:inline-block;padding:10px 20px;background:#4F46E5;

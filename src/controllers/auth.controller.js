@@ -7,6 +7,7 @@ const { CGU_VERSION } = require('../config/legal');
 const { syncSubscriptionQuantity } = require('../services/billing.service');
 const { DEFAULT_LEAVE_ACCRUAL } = require('../services/leaves.service');
 const { forgetTodayVisits } = require('../services/visits.service');
+const { escapeHtml } = require('../utils/html');
 
 // ─────────────────────────────────────────────
 // UTILITAIRES
@@ -29,7 +30,7 @@ const sendResetPasswordEmail = async (email, firstName, resetToken) => {
     to: email,
     subject: 'Réinitialisation de votre mot de passe',
     html: `
-      <h2>Bonjour ${firstName},</h2>
+      <h2>Bonjour ${escapeHtml(firstName)},</h2>
       <p>Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le lien ci-dessous pour en choisir un nouveau :</p>
       <a href="${resetUrl}" style="
         display:inline-block;padding:12px 24px;background:#4F46E5;
@@ -48,7 +49,7 @@ const sendInviteEmail = async (email, firstName, inviteToken) => {
     to: email,
     subject: 'Bienvenue — Créez votre accès RH',
     html: `
-      <h2>Bonjour ${firstName},</h2>
+      <h2>Bonjour ${escapeHtml(firstName)},</h2>
       <p>Votre compte a été créé. Cliquez sur le lien ci-dessous pour définir votre mot de passe :</p>
       <a href="${inviteUrl}" style="
         display:inline-block;padding:12px 24px;background:#4F46E5;
@@ -113,6 +114,17 @@ const setupCompany = async (req, res) => {
   const cleanSiret = siret && siret.trim() ? siret.trim() : null;
 
   try {
+    // Étape réservée au gérant qui vient de s'inscrire et n'a pas encore
+    // d'entreprise (audit du 28 nov. 2026 : un salarié ou un gérant déjà
+    // installé pouvait sinon créer une entreprise et quitter la sienne)
+    const me = (await db.query('SELECT role, company_id FROM users WHERE id = $1', [adminId])).rows[0];
+    if (!me || me.role !== 'admin') {
+      return res.status(403).json({ message: 'Accès réservé à l\'administrateur.' });
+    }
+    if (me.company_id) {
+      return res.status(409).json({ message: 'Votre entreprise est déjà créée.' });
+    }
+
     // Création de l'entreprise
     const companyResult = await db.query(
       `INSERT INTO company (name, siret, address, city, postal_code, sector, leave_accrual_per_month)
@@ -345,7 +357,8 @@ const acceptInvite = async (req, res) => {
       `SELECT * FROM users
        WHERE invite_token = $1
          AND invite_expires > NOW()
-         AND invite_accepted = FALSE`,
+         AND invite_accepted = FALSE
+         AND is_active = TRUE`,
       [token]
     );
 
@@ -362,9 +375,10 @@ const acceptInvite = async (req, res) => {
       `UPDATE users
        SET password_hash = $1, invite_accepted = TRUE,
            invite_token = NULL, invite_expires = NULL,
+           cgu_accepted_at = NOW(), cgu_version = $3,
            updated_at = NOW()
        WHERE id = $2`,
-      [passwordHash, user.id]
+      [passwordHash, user.id, CGU_VERSION]
     );
 
     // Connecte directement l'employé
@@ -466,7 +480,7 @@ const resetPassword = async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT * FROM users WHERE reset_token = $1 AND reset_expires > NOW()`,
+      `SELECT * FROM users WHERE reset_token = $1 AND reset_expires > NOW() AND is_active = TRUE`,
       [token]
     );
     const user = result.rows[0];
